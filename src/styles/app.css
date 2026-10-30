@@ -1,0 +1,1911 @@
+/*
+ * Circular Drum — visual system.
+ * The four color forms are the artwork; everything else is a quiet frame:
+ * warm-white canvas, hairlines instead of boxes, small sentence-case type,
+ * and color only where it carries meaning (an instrument's own gradient).
+ */
+:root {
+  --canvas: #fafafa;
+  --ink: #1c1c1f;
+  --muted: #86868c;
+  --faint: #b3b3b8;
+  --hair: rgba(0, 0, 0, 0.075);
+  --hair-strong: rgba(0, 0, 0, 0.14);
+  --dot-off: #e2e2e5;
+  --accent: #1f5bd8;
+  --hover: rgba(0, 0, 0, 0.035);
+  --surface: rgba(250, 250, 250, 0.7);
+  --veil: rgba(250, 250, 250, 0.62);
+  --shadow: rgba(0, 0, 0, 0.06);
+  --glass-blur: blur(22px) saturate(1.5);
+  --danger: #b4495a;
+  --notice-bg: #f3f3f4;
+  --notice-ink: #8a3b2f;
+  --ease-soft: cubic-bezier(0.22, 0.7, 0.18, 1);
+  font-family: 'Helvetica Neue', -apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, 'Segoe UI Variable Text', 'Segoe UI', system-ui, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: 0.015em;
+  color: var(--ink);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Dark mode: pure black canvas (#000000); the forms keep their own colors and glow. */
+:root[data-theme='dark'] {
+  --canvas: #000000;
+  --ink: #ecebf0;
+  --muted: #8d8a96;
+  --faint: #6c6975;
+  --hair: rgba(255, 255, 255, 0.09);
+  --hair-strong: rgba(255, 255, 255, 0.17);
+  --dot-off: #2b2b30;
+  --hover: rgba(255, 255, 255, 0.05);
+  --surface: rgba(16, 16, 18, 0.6);
+  --veil: rgba(0, 0, 0, 0.55);
+  --shadow: rgba(0, 0, 0, 0.45);
+  --danger: #e27a8b;
+  --notice-bg: #141416;
+  --notice-ink: #f0b3a6;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: var(--canvas);
+  color: var(--ink);
+  transition: background 320ms ease, color 320ms ease;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 1.5px solid var(--ink);
+  outline-offset: 3px;
+}
+
+/* ─── The artwork ───────────────────────────────────────── */
+
+/*
+ * Layout box of an artwork (±106 units) and its drawing (±200 units, see
+ * INK in ArtworkGraphic.tsx): the drawing is 200/106 as large and centred,
+ * so halos spill softly past the box without ever changing its size or
+ * the page's scroll extent. It never takes clicks; the box does.
+ */
+.art-box {
+  position: relative;
+  aspect-ratio: 1;
+}
+
+.art-box > .art {
+  position: absolute;
+  left: -44.34%;
+  top: -44.34%;
+  width: 188.68%;
+  height: 188.68%;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/*
+ * Dark Mode neon: a faint light at the centre of every circle, as if it shone
+ * from within (screen only brightens; the colors keep their hue). It stays
+ * well inside even the smallest circle, so the black around it is untouched.
+ */
+:root[data-theme='dark'] .art-box::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle closest-side, rgb(255 255 255 / 0.22), rgb(255 255 255 / 0.09) 22%, transparent 42%);
+  mix-blend-mode: screen;
+}
+
+/* Color changes melt from one gradient family into the next. */
+.art stop {
+  transition: stop-color 520ms var(--ease-soft);
+}
+
+/* ─── Small shared pieces ───────────────────────────────── */
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 200ms ease, background 200ms ease;
+}
+
+.icon-btn:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+/* ─── Library: a full-screen gallery ──────────────────── */
+
+.library {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.library-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Halos spill past the outer thumbnails; never a sideways scrollbar. */
+  overflow-x: hidden;
+  padding: 56px 32px 24px;
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  margin-top: 20vh;
+}
+
+.grid {
+  list-style: none;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0;
+  display: grid;
+  /* 8 × 8 artworks per page on desktop; fewer columns on smaller screens. */
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 22px 28px;
+}
+
+.cell {
+  min-width: 0;
+}
+
+/* Square cell; the artwork sits on its exact centre. */
+.frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1;
+}
+
+.thumb {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.thumb:focus-visible {
+  outline-offset: -2px;
+}
+
+.thumb-art {
+  width: calc(var(--scale, 0.85) * 100%);
+  height: auto;
+  display: block;
+  transition: transform 520ms var(--ease-soft);
+}
+
+/* Listening: the artwork leans in a little, from its own centre. */
+.thumb.is-previewing .thumb-art {
+  transform: scale(1.045);
+}
+
+/* Top-right actions of the library: All Animations On/Off, then +. */
+/* The speaker (volume) at the top left, mirroring the icons at the top right. */
+.lib-volume {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 2;
+}
+
+.lib-actions {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+}
+
+.add-btn {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 200ms ease, color 200ms ease;
+}
+
+.add-btn:hover {
+  color: var(--ink);
+  border-color: var(--hair-strong);
+}
+
+/* Off reads clearly: a filled-in ring instead of the plain icon. */
+.anim-btn.is-off {
+  color: var(--ink);
+  border-color: var(--hair-strong);
+  background: var(--hover);
+}
+
+/* Fullscreen: the one control, shown only while a preview plays and the pointer moves. */
+.fs-stop-preview {
+  position: fixed;
+  left: 50%;
+  bottom: calc(22px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 2;
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 18px;
+  border: 1px solid var(--hair-strong);
+  background: var(--veil);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: opacity 400ms ease;
+}
+
+.fs-stop-preview.is-asleep {
+  opacity: 0;
+}
+
+.fs-stop-preview.is-asleep:focus-visible {
+  opacity: 1;
+}
+
+/* ─── Fullscreen layout editor ─── */
+.le-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--veil);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  animation: pop-in 220ms var(--ease-soft);
+}
+
+.le-dialog {
+  width: min(1080px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 16px;
+  border-radius: 20px;
+  background: var(--canvas);
+  border: 1px solid var(--hair);
+  box-shadow: 0 24px 80px var(--shadow);
+  font-size: 13px;
+  outline: none;
+  overflow: hidden;
+}
+
+/* Title and actions stay put; only the middle scrolls when space runs out. */
+.le-head,
+.le-foot {
+  flex: none;
+}
+
+.le-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 14px;
+}
+
+.le-body {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.le-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.le-side .fs-pick-list {
+  max-height: min(30vh, 240px);
+}
+
+.le-size {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 8 × 8 dots; press and drag to the size you want, the block lights up live. */
+.le-size-pad {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  width: 168px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--hair);
+  touch-action: none;
+  cursor: crosshair;
+  user-select: none;
+}
+
+.le-size-pad:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.le-size-pad i {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--dot-off);
+  pointer-events: none;
+  transition: background 80ms ease;
+}
+
+.le-size-pad i.is-on {
+  background: var(--ink);
+}
+
+.le-main {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* The preview has the screen's shape, so it shows the composition as fullscreen will. */
+.le-stage {
+  position: relative;
+  flex: none;
+  /* As wide as fits, but never taller than 52vh: the screen's shape is kept at any grid size. */
+  width: min(100%, calc(52vh * var(--aspect)));
+  aspect-ratio: var(--aspect);
+  margin: 0 auto;
+  border-radius: 14px;
+  background: var(--canvas);
+  box-shadow: inset 0 0 0 1px var(--hair);
+  overflow: hidden;
+}
+
+.le-grid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+}
+
+/* Cells are only hinted (soft dotted lines) and never clip: glows run across them. */
+.le-cell {
+  position: relative;
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+  outline: 1px dashed color-mix(in srgb, var(--faint) 45%, transparent);
+  outline-offset: -1px;
+  transition: background 120ms ease;
+}
+
+.le-cell.is-over {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--ink) 45%, transparent);
+  outline-offset: -1px;
+}
+
+.le-cell:not(.is-full) {
+  cursor: pointer;
+}
+
+.le-circle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100cqmin;
+  height: 100cqmin;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.le-circle.is-dragging {
+  z-index: 10;
+  cursor: grabbing;
+  pointer-events: none;
+}
+
+/* No focus ring on a circle that was just pressed or dragged; keyboard focus still shows it. */
+.le-circle:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.le-cell .le-art {
+  /* Same share of the cell as in fullscreen, so the preview matches it. */
+  width: 96cqmin;
+}
+
+.le-tray {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-height: 58px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  border: 1px dashed var(--hair-strong);
+}
+
+.le-tray.is-over {
+  border-color: var(--ink);
+  background: var(--hover);
+}
+
+.le-tray .le-circle {
+  width: 46px;
+  height: 46px;
+  container-type: size;
+}
+
+.le-tray .le-art {
+  width: 40px;
+}
+
+.le-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
+.le-tools .text-btn:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+
+
+
+.le-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.le-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+}
+
+.le-btn {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 17px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.le-foot .fs-show {
+  padding: 0 18px;
+}
+
+@media (max-width: 720px) {
+  .le-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .le-dialog {
+    padding: 14px;
+  }
+}
+
+.pager {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 20px;
+}
+
+.page-btn {
+  min-width: 30px;
+  height: 30px;
+  border-radius: 15px;
+  border: none;
+  background: transparent;
+  color: var(--faint);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.page-btn:hover {
+  color: var(--muted);
+}
+
+.page-btn.is-active {
+  color: var(--ink);
+}
+
+/* Silent ambient motion is driven from animation/ambient.ts (SVG attributes, works in every browser). */
+
+/*
+ * Fullscreen views: only circles on the canvas, nothing else. The cover fills
+ * the window even where the browser refuses real fullscreen.
+ */
+.fs-view {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: var(--canvas);
+  outline: none;
+  overflow: hidden;
+  /* clip, not just hidden: a grown circle at the edge can never scroll the grid (e.g. on keyboard focus). */
+  overflow: clip;
+}
+
+.fs-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+}
+
+.fs-cell {
+  display: grid;
+  /* One fixed track: an artwork larger than its cell stays centred on it. */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  container-type: size;
+}
+
+.fs-single {
+  display: grid;
+  place-items: center;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  container-type: size;
+}
+
+/*
+ * Each artwork is a square as large as its cell (or the screen) allows: the
+ * smaller of the box's width and height, so it never stretches or overflows.
+ */
+/* As large as its cell allows (its smaller side, less a little air): every circle stays whole, on any screen. */
+.fs-art {
+  display: block;
+  width: 96cqmin;
+  height: 96cqmin;
+}
+
+/* The circle's own area: a click switches it on (moving, with the one sound) or off. */
+.fs-hit {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  cursor: pointer;
+  transform: scale(1);
+  filter: drop-shadow(0 0 0 transparent) brightness(1);
+  /* Leaving: quick, so the emphasis is gone as soon as the sound is. */
+  transition: transform 220ms var(--ease-soft), filter 220ms var(--ease-soft);
+}
+
+/* A slightly brighter centre, only while playing; nothing to see or click otherwise. */
+.fs-hit::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle closest-side, rgb(255 255 255 / 0.3), rgb(255 255 255 / 0.12) calc(var(--core, 25%) * 0.5), transparent var(--core, 25%));
+  mix-blend-mode: soft-light;
+  opacity: 0;
+  transition: opacity 220ms var(--ease-soft);
+}
+
+.fs-hit:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/*
+ * The circle whose sound is really playing grows around its own centre by
+ * --boost (to one shared size for every circle: target / its own drawn size), with a
+ * soft halo in its own outer color and a slightly brighter centre. Colors,
+ * gradients and its motion stay as they are. Growing eases in; leaving is quick.
+ */
+.fs-hit.is-sounding {
+  z-index: 1;
+  transform: scale(var(--boost, 1.13));
+  filter: drop-shadow(0 0 3.5cqmin color-mix(in srgb, var(--halo, #fff) 75%, transparent)) brightness(1.04);
+  transition: transform 520ms var(--ease-soft), filter 520ms var(--ease-soft);
+}
+
+.fs-hit.is-sounding::after {
+  opacity: 1;
+  transition: opacity 520ms var(--ease-soft);
+}
+
+.fs-single .fs-art {
+  width: 90cqmin;
+  height: 90cqmin;
+}
+
+.fs-picker-actions {
+  display: flex;
+  gap: 14px;
+}
+
+.text-btn {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.text-btn:hover,
+.text-btn:focus-visible {
+  color: var(--ink);
+}
+
+/* Every circle as a small live-colored thumbnail; chosen ones are full and ringed. */
+.fs-pick-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 2px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+  max-height: min(46vh, 330px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.fs-pick {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.38;
+  transition: opacity 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+.fs-pick.is-on {
+  opacity: 1;
+  color: var(--ink);
+  border-color: var(--hair-strong);
+}
+
+.fs-pick.is-on::after {
+  content: '✓';
+  position: absolute;
+  top: 3px;
+  right: 6px;
+  font-size: 10px;
+  color: var(--ink);
+}
+
+.fs-pick:hover,
+.fs-pick:focus-visible {
+  opacity: 1;
+}
+
+.fs-pick-art {
+  width: 40px;
+}
+
+.fs-pick-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fs-show {
+  height: 34px;
+  border-radius: 17px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--canvas);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.fs-show:disabled {
+  background: transparent;
+  border-color: var(--hair-strong);
+  color: var(--faint);
+  cursor: default;
+}
+
+/* The one settings icon, in its own strip below the gallery. */
+/* Bottom strip: + in the centre, Fullscreen View at the right. */
+.library-foot {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 6px 16px calc(10px + env(safe-area-inset-bottom));
+}
+
+.library-foot .new-btn {
+  grid-column: 2;
+}
+
+.library-foot > .settings {
+  grid-column: 3;
+  justify-self: end;
+}
+
+.settings {
+  position: relative;
+}
+
+.settings-btn {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--faint);
+  cursor: pointer;
+  transition: color 200ms ease, background 200ms ease, transform 420ms var(--ease-soft);
+}
+
+.settings-btn:hover,
+.settings-btn.is-open {
+  color: var(--ink);
+  background: var(--hover);
+}
+
+.settings-btn.is-open {
+  transform: rotate(30deg);
+}
+
+.settings-panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  width: min(260px, calc(100vw - 32px));
+  padding: 14px 16px 12px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  box-shadow: 0 12px 44px var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 13px;
+  animation: pop-in 220ms var(--ease-soft);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.settings-volume {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-volume input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-volume input[type='range']::-webkit-slider-runnable-track {
+  height: 1px;
+  background: linear-gradient(to right, var(--ink) var(--pct), var(--hair-strong) var(--pct));
+}
+
+.settings-volume input[type='range']::-moz-range-track {
+  height: 1px;
+  background: var(--hair-strong);
+}
+
+.settings-volume input[type='range']::-moz-range-progress {
+  height: 1px;
+  background: var(--ink);
+}
+
+.settings-volume input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: none;
+}
+
+.settings-volume input[type='range']::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: none;
+}
+
+.switch {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  padding: 0;
+  border-radius: 9px;
+  border: 1px solid var(--hair-strong);
+  background: transparent;
+  cursor: pointer;
+  transition: background 220ms ease, border-color 220ms ease;
+}
+
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 260ms var(--ease-soft), background 220ms ease;
+}
+
+.switch[aria-checked='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.switch[aria-checked='true'] .switch-knob {
+  transform: translateX(14px);
+  background: var(--canvas);
+}
+
+/*
+ * A circle's own menu: appears on hover, keyboard focus or a long press. It
+ * hangs just below the circle so it never covers the circle you click to edit.
+ */
+.cell-menu {
+  position: absolute;
+  left: 50%;
+  top: calc(100% - 4px);
+  z-index: 3;
+  transform: translate(-50%, 4px);
+  display: flex;
+  flex-direction: column;
+  min-width: 132px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  box-shadow: 0 10px 34px var(--shadow);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 180ms ease, transform 220ms var(--ease-soft), visibility 0s linear 180ms;
+}
+
+@media (hover: hover) {
+  .frame:hover .cell-menu {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translate(-50%, 0);
+    transition-delay: 0s;
+  }
+}
+
+.cell:has(:focus-visible) .cell-menu,
+.cell.is-held .cell-menu {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+  transition-delay: 0s;
+}
+
+/* Stop Preview: one text color for every circle (not the circle's own --accent), in both themes. */
+.cell-menu button.is-active {
+  color: var(--ink);
+}
+
+.cell-menu button {
+  text-align: left;
+  white-space: nowrap;
+  border: none;
+  background: transparent;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cell-menu button:hover,
+.cell-menu button:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+.cell-menu .danger {
+  color: var(--danger);
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    translate: 0 4px;
+  }
+}
+
+/* ─── Editor ────────────────────────────────────────────── */
+
+.editor {
+  min-height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.editor-bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 18px 0;
+}
+
+.title {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rename {
+  display: flex;
+  justify-content: center;
+}
+
+.rename input {
+  width: min(260px, 100%);
+  font: inherit;
+  font-size: 14px;
+  text-align: center;
+  padding: 4px 2px;
+  border: none;
+  border-bottom: 1px solid var(--hair-strong);
+  border-radius: 0;
+  background: transparent;
+  outline: none;
+}
+
+.rename input:focus {
+  border-bottom-color: var(--ink);
+}
+
+.bar-right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.save-btn {
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 15px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 220ms ease, color 220ms ease, border-color 220ms ease;
+}
+
+.save-btn:not(:disabled):hover {
+  background: var(--ink);
+  color: var(--canvas);
+}
+
+.save-btn:disabled {
+  border-color: transparent;
+  color: var(--faint);
+  cursor: default;
+}
+
+.menu {
+  position: relative;
+}
+
+.menu-pop {
+  position: absolute;
+  right: 0;
+  top: 44px;
+  z-index: 10;
+  min-width: 150px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  border-radius: 14px;
+  box-shadow: 0 10px 40px var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.menu-pop button {
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.menu-pop button:hover {
+  background: var(--hover);
+}
+
+.menu-pop .danger {
+  color: var(--danger);
+}
+
+/* The stage: the forms float in open space. */
+.stage {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  /* Halos may spill sideways past narrow screens; never a sideways scrollbar. */
+  overflow-x: clip;
+  padding: clamp(12px, 4vh, 48px) 16px clamp(8px, 3vh, 32px);
+}
+
+.stage-art {
+  width: min(78vw, 52vh, 600px);
+  height: auto;
+  display: block;
+}
+
+.controls {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 8px 24px calc(28px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 22px;
+}
+
+/* ─── Sliders: hairline track, small thumb ──────────────── */
+
+.sliders {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 40px;
+}
+
+.slider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 12px;
+}
+
+.slider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.slider-note {
+  color: var(--muted);
+}
+
+.slider-value {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.slider input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.slider input[type='range']:focus-visible {
+  outline-offset: 0;
+  border-radius: 4px;
+}
+
+.slider input[type='range']::-webkit-slider-runnable-track {
+  height: 1px;
+  background: linear-gradient(to right, var(--ink) var(--pct), var(--hair-strong) var(--pct));
+}
+
+.slider input[type='range']::-moz-range-track {
+  height: 1px;
+  background: var(--hair-strong);
+}
+
+.slider input[type='range']::-moz-range-progress {
+  height: 1px;
+  background: var(--ink);
+}
+
+.slider input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: none;
+  transition: transform 160ms ease;
+}
+
+.slider input[type='range']:hover::-webkit-slider-thumb {
+  transform: scale(1.25);
+}
+
+.slider input[type='range']::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: none;
+}
+
+/* ─── Step rows: dots, colored by each instrument ───────── */
+
+.step-grid {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-x: auto;
+  padding: 2px 0;
+}
+
+.step-row-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.step-row {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  align-items: center;
+  gap: 10px;
+  min-width: max(100%, calc(112px + var(--steps) * 16px));
+}
+
+.step-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--ink);
+  min-width: 0;
+}
+
+.row-name {
+  white-space: nowrap;
+}
+
+.row-note {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Each row's own color: a small gradient bead that opens the seven colors. */
+.row-color {
+  flex: none;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: var(--row-dot);
+  cursor: pointer;
+  box-shadow: 0 0 0 0 transparent, 0 0 8px -1px var(--row-glow);
+  transition: box-shadow 220ms ease, transform 220ms var(--ease-soft), background 520ms ease;
+}
+
+.row-color:hover {
+  transform: scale(1.15);
+}
+
+.row-color.is-open {
+  box-shadow: 0 0 0 3px var(--canvas), 0 0 0 4px var(--row-soft);
+}
+
+.step-cells {
+  display: grid;
+  grid-template-columns: repeat(var(--steps), minmax(0, 1fr));
+  gap: 0;
+}
+
+.step {
+  position: relative;
+  height: 28px;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* The dot: small and pale when off, a full gradient bead when on. */
+.step::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dot-off);
+  transform: translate(-50%, -50%);
+  transition: width 200ms var(--ease-soft), height 200ms var(--ease-soft), background 260ms ease, box-shadow 200ms ease;
+}
+
+/* Every fourth step starts a beat: a slightly stronger dot. */
+.step.beat::before {
+  width: 7px;
+  height: 7px;
+  background: var(--hair-strong);
+}
+
+.step:hover::before {
+  width: 9px;
+  height: 9px;
+  background: var(--row-soft);
+}
+
+.step.is-on::before {
+  width: 13px;
+  height: 13px;
+  background: var(--row-dot);
+  box-shadow: 0 0 6px -1px var(--row-glow);
+}
+
+.step.is-on:hover::before {
+  width: 14px;
+  height: 14px;
+}
+
+/* Playhead: the column being heard gets a soft glow. */
+.step.is-now::before {
+  width: 9px;
+  height: 9px;
+  background: var(--faint);
+}
+
+.step.is-on.is-now::before {
+  width: 16px;
+  height: 16px;
+  background: var(--row-dot);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--canvas) 70%, transparent), 0 0 14px 2px var(--row-glow);
+}
+
+.step:focus-visible {
+  outline-offset: -2px;
+}
+
+.row-picker {
+  display: flex;
+  padding: 6px 0 10px 25px;
+}
+
+/* ─── Color swatches ────────────────────────────────────── */
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: var(--swatch);
+  cursor: pointer;
+  box-shadow: 0 0 0 0 transparent;
+  transition: box-shadow 220ms ease, transform 220ms var(--ease-soft);
+}
+
+.swatch:hover {
+  transform: scale(1.12);
+}
+
+.swatch.is-active {
+  box-shadow: 0 0 0 3px var(--canvas), 0 0 0 4px var(--swatch-ring);
+}
+
+.row-picker .swatches {
+  justify-content: flex-start;
+  gap: 11px;
+}
+
+/* ─── Transport ─────────────────────────────────────────── */
+
+.transport {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.round-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 220ms ease, color 220ms ease, border-color 220ms ease;
+}
+
+.round-btn:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--hair-strong);
+}
+
+.round-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.round-btn.primary {
+  width: 52px;
+  height: 52px;
+  border-color: var(--ink);
+  color: var(--ink);
+  padding-left: 3px;
+}
+
+.round-btn.primary:hover,
+.round-btn.primary.is-on {
+  background: var(--ink);
+  color: var(--canvas);
+}
+
+.round-btn.is-on:not(.primary) {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+/* ─── Messages ──────────────────────────────────────────── */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  padding: 7px 16px;
+  border-radius: 18px;
+  background: var(--ink);
+  color: var(--canvas);
+  font-size: 13px;
+  animation: toast-in 260ms var(--ease-soft);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+}
+
+.sample-notice {
+  max-width: 620px;
+  margin: 18px auto 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--notice-bg);
+  color: var(--notice-ink);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sample-notice code {
+  font-size: 11px;
+}
+
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--veil);
+  backdrop-filter: blur(6px);
+}
+
+.confirm {
+  width: min(340px, 100%);
+  padding: 22px;
+  border-radius: 18px;
+  background: var(--canvas);
+  border: 1px solid var(--hair);
+  box-shadow: 0 14px 50px var(--shadow);
+}
+
+.confirm p {
+  margin: 0 0 18px;
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.confirm-actions button {
+  height: 34px;
+  padding: 0 16px;
+  border-radius: 17px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.confirm-cancel {
+  border: 1px solid var(--hair-strong);
+  background: transparent;
+}
+
+.confirm-ok {
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--canvas);
+}
+
+.confirm-ok.danger {
+  border-color: var(--danger);
+  background: #b4495a;
+}
+
+/* ─── Smaller screens ───────────────────────────────────── */
+
+@media (max-width: 899px) {
+  .grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .library-scroll {
+    padding: 52px 16px 16px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px 14px;
+  }
+
+  .stage-art {
+    width: min(84vw, 46vh);
+  }
+
+  .controls {
+    gap: 16px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .sliders {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .step-row {
+    grid-template-columns: 92px 1fr;
+    gap: 6px;
+  }
+
+  .step {
+    height: 30px;
+  }
+
+  .step-label {
+    flex-wrap: wrap;
+    column-gap: 9px;
+    row-gap: 0;
+  }
+
+  .row-note {
+    flex-basis: 100%;
+    padding-left: 25px;
+    font-size: 10px;
+    line-height: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thumb-art,
+  .swatch,
+  .row-color,
+  .step::before,
+  .art stop {
+    transition: none;
+  }
+}
+
+
+/* ─── Minimal, transparent frame ─────────────────────────
+ * One neutral solid canvas, thin type, hairlines and frosted glass panels
+ * that let the circles show through. Shared by every screen.
+ */
+button,
+input,
+select {
+  font-weight: inherit;
+  letter-spacing: inherit;
+}
+
+.title,
+.rename input,
+.le-head {
+  font-weight: 200;
+  letter-spacing: 0.06em;
+}
+
+.slider-label,
+.slider-head,
+.le-hint,
+.row-note,
+.settings-row,
+.fs-pick-name {
+  letter-spacing: 0.04em;
+}
+
+.settings-panel,
+.cell-menu,
+.menu-pop,
+.le-dialog,
+.fs-stop-preview,
+.confirm {
+  background: var(--surface);
+  border: 1px solid var(--hair);
+  box-shadow: 0 18px 50px -12px var(--shadow);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+}
+
+.le-backdrop {
+  background: var(--veil);
+}
+
+.le-stage,
+.le-tray,
+.le-size-pad {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--hair);
+}
+
+/* Buttons: thin outlines, no fills; the action reads from its word. */
+.le-btn,
+.save-btn,
+.fs-show,
+.page-btn.is-active {
+  border: 1px solid var(--hair-strong);
+  background: transparent;
+  color: var(--ink);
+  font-weight: 300;
+}
+
+.le-btn:hover,
+.fs-show:not(:disabled):hover,
+.save-btn:not(:disabled):hover {
+  background: var(--hover);
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.fs-show:disabled {
+  border-color: var(--hair);
+}
+
+.icon-btn,
+.settings-btn,
+.add-btn {
+  color: var(--muted);
+}
+
+.icon-btn:hover,
+.settings-btn:hover,
+.settings-btn.is-open {
+  background: transparent;
+  color: var(--ink);
+}
+
+.add-btn:hover,
+.anim-btn.is-off {
+  border-color: var(--hair-strong);
+  background: transparent;
+}
+
+.le-size-pad i {
+  transform: scale(0.42);
+  transition: transform 160ms var(--ease-soft), background 160ms ease;
+}
+
+.le-size-pad i.is-on {
+  transform: scale(0.62);
+}
+
+.fs-pick {
+  border-color: var(--hair);
+  background: transparent;
+}
+
+
+/* The settings panel opens below its icon at the top right. */
+.settings-panel.is-below {
+  top: calc(100% + 8px);
+  bottom: auto;
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.settings-panel.is-below.is-left {
+  left: 0;
+  right: auto;
+}
+
+.gear-btn svg {
+  transition: transform 420ms var(--ease-soft);
+}
+
+.gear-btn.is-open svg {
+  transform: rotate(30deg);
+}
+
+/* A small on/off switch (Dark Mode). */
+.onoff {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.onoff i {
+  position: relative;
+  width: 22px;
+  height: 12px;
+  border-radius: 6px;
+  border: 1px solid currentColor;
+}
+
+.onoff i::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  transition: transform 160ms ease;
+}
+
+.onoff.is-on {
+  color: var(--ink);
+}
+
+.onoff.is-on i::after {
+  transform: translateX(10px);
+}
+
+.add-btn.is-open {
+  color: var(--ink);
+  border-color: var(--hair-strong);
+}
+
+/* Search saved beats by name (layout editor side panel): a single hairline field. */
+.beat-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 34px;
+  padding: 0 4px;
+  border-bottom: 1px solid var(--hair);
+  color: var(--muted);
+}
+
+.beat-search:focus-within {
+  border-color: var(--hair-strong);
+  color: var(--ink);
+}
+
+.beat-search svg {
+  flex: none;
+}
+
+.beat-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+}
+
+.beat-search input::placeholder {
+  color: var(--faint);
+}
+
+.beat-search input::-webkit-search-cancel-button {
+  opacity: 0.5;
+}
+
+/* Library: the circle's title as plain text just above its frame, on hover only (no box, so the artwork stays the focus). */
+.cell-title {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  z-index: 2;
+  max-width: 100%;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 300;
+  letter-spacing: 0.03em;
+  line-height: 1.3;
+  /* A soft halo of the canvas color keeps it readable over a neighbour's glow. */
+  text-shadow: 0 0 6px var(--canvas), 0 0 2px var(--canvas);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(-50%, 3px);
+  transition: opacity 160ms ease, transform 160ms ease, visibility 0s 160ms;
+}
+
+@media (hover: hover) {
+  .frame:hover .cell-title {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, 0);
+    transition-delay: 0s;
+  }
+}

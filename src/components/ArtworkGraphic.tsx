@@ -1,0 +1,430 @@
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { audibleTime } from '../animation/clock';
+import type { DropletAnimator } from '../animation/droplet';
+import { MOTION } from '../animation/visualEvents';
+import { CHANNELS } from '../audio/channels';
+import { transport } from '../audio/transport';
+import { buildRings } from '../presets/designs';
+import { overlapState } from '../animation/overlap';
+import { darkContour, darkLift, gradientFor, GRADIENTS, type ColorStop, type GradientFamily } from '../presets/gradients';
+import { useSettings } from '../storage/settingsStore';
+import { circleSizes, SIZE_PRIORITY } from '../presets/sizing';
+import type { ArtworkDesign, Channel, ChannelColors, ChannelPatterns, Ring } from '../types';
+
+const VIEW = 106;
+/**
+ * The drawing extends to ±INK so the halos (up to ~2.5 blur radii outside a
+ * swollen form) are never cut, while the layout box stays ±VIEW: the SVG is
+ * drawn larger than, and centred on, its box (see .art-box in app.css). Its
+ * size never changes, so sound-driven swelling can never move the page.
+ */
+const INK = 200;
+
+interface Props {
+  design: ArtworkDesign;
+  /** Each instrument's color; its form is drawn from that color's gradient family. */
+  colors: ChannelColors;
+  /** Step rows and pattern length; circle sizes follow each row's active steps. */
+  patterns: ChannelPatterns;
+  steps: number;
+  /** When given, each form moves with its own instrument's sound events. */
+  animator?: DropletAnimator;
+  /** Shown in the library, where `animator` is the artwork's silent rhythm (see animation/silentRhythm.ts). */
+  idle?: boolean;
+  /** Its library motion was stopped from the menu. */
+  paused?: boolean;
+  className?: string;
+  label?: string;
+}
+
+type Stop = [offset: number, tone: keyof GradientFamily, opacity: number];
+
+/**
+ * Inside of each form, from its core (offset 0) to its rim (offset 1):
+ *
+ *   kick   dense: a deep core spreading through rich and base to a light rim
+ *   snare  energetic: a luminous light core inside a saturated body
+ *   hihat  airy: a lighter membrane whose color gathers at the rim
+ *   clap   bright: a glowing core opening into its base and rich tones
+ *
+ * The outermost form holds its colors to a clean, precise silhouette (the
+ * edge blur only anti-aliases). Every form inside it thins out over its last
+ * quarter through several stops, so internal color boundaries blend
+ * gradually instead of reading as stacked rings, while each region keeps its
+ * own color. The softness comes from the gradients, not from blur.
+ *
+ * Every stop is a tone of the instrument's own color family, so a form never
+ * shows a hue from another color.
+ */
+const STOPS: Record<Channel, { outer: Stop[]; inner: Stop[] }> = {
+  kick: {
+    outer: [[0, 'deep', 1], [0.32, 'rich', 1], [0.62, 'base', 1], [0.82, 'base', 1], [0.93, 'rich', 0.96], [1, 'base', 0.9]],
+    inner: [[0, 'deep', 1], [0.3, 'rich', 1], [0.56, 'base', 1], [0.74, 'base', 0.85], [0.88, 'rich', 0.4], [1, 'rich', 0]],
+  },
+  snare: {
+    outer: [[0, 'light', 1], [0.2, 'base', 1], [0.55, 'base', 1], [0.78, 'rich', 1], [0.93, 'rich', 0.96], [1, 'rich', 0.9]],
+    inner: [[0, 'light', 1], [0.2, 'base', 1], [0.52, 'base', 1], [0.72, 'rich', 0.85], [0.88, 'rich', 0.4], [1, 'rich', 0]],
+  },
+  hihat: {
+    outer: [[0, 'light', 0.82], [0.45, 'light', 0.82], [0.72, 'base', 0.86], [0.86, 'base', 0.84], [0.95, 'rich', 0.8], [1, 'rich', 0.76]],
+    inner: [[0, 'light', 0.82], [0.42, 'light', 0.82], [0.66, 'base', 0.8], [0.8, 'base', 0.6], [0.92, 'rich', 0.25], [1, 'rich', 0]],
+  },
+  clap: {
+    outer: [[0, 'light', 1], [0.26, 'base', 1], [0.6, 'rich', 1], [0.8, 'rich', 1], [0.93, 'rich', 0.94], [1, 'rich', 0.88]],
+    inner: [[0, 'light', 1], [0.24, 'base', 1], [0.54, 'rich', 1], [0.72, 'rich', 0.8], [0.88, 'rich', 0.35], [1, 'rich', 0]],
+  },
+};
+/** The outermost form keeps a clean silhouette; forms inside it thin out over their last quarter and melt into the color around them. */
+const stopsOf = (ch: Channel, outer: boolean) => (outer ? STOPS[ch].outer : STOPS[ch].inner);
+
+/** Stop colors and opacities of a form; in Dark Mode the outermost one gets its soft contour (see darkContour). */
+function stopColors(ch: Channel, outer: boolean, g: GradientFamily, dark: boolean): ColorStop[] {
+  const stops: ColorStop[] = stopsOf(ch, outer).map(([o, t, a]) => [o, g[t], a]);
+  return dark && outer ? darkContour(darkLift(stops, g.light)) : stops;
+}
+const stopOffsets = (ch: Channel, outer: boolean, dark: boolean) => stopColors(ch, outer, GRADIENTS.orange, dark);
+
+/** Overall saturation of the forms at rest (1 = the color families as they are; the pastel lift below keeps them soft). */
+const BASE_SAT = 1;
+/**
+ * Pastel lift: each channel becomes c·slope + lift. The palette itself is now
+ * pastel (exact reference HEX values), so the lift is neutral (1, 0) and every
+ * base tone renders as its exact HEX.
+ */
+const PASTEL = { slope: 1, lift: 0 };
+
+/** How far each gradient core keeps its off-centre position (1 = fully): mostly concentric, flat-luminous rather than glossy. */
+const CORE_PULL = 0.3;
+
+/** Soft edge (share of the radius) and the outer halo's spread and strength. */
+const EDGE: Record<Channel, number> = {
+  kick: 0.004,
+  snare: 0.004,
+  hihat: 0.006,
+  clap: 0.004,
+};
+const HALO_SPREAD: Record<Channel, number> = {
+  kick: 0.09,
+  snare: 0.1,
+  hihat: 0.08,
+  clap: 0.12,
+};
+const HALO_ALPHA: Record<Channel, number> = {
+  kick: 0.1,
+  snare: 0.09,
+  hihat: 0.07,
+  clap: 0.1,
+};
+
+/**
+ * Dark Mode neon: the outermost form's own-color halo is wider and stronger,
+ * so the circle seems to give off its own light on black. The form itself
+ * (shape, edge, gradient) is unchanged; the light stays close enough that
+ * neighbours never merge. Light Mode and inner forms keep the values above.
+ */
+const NEON = { spread: 2.3, alpha: 6.5 };
+function glowOf(ch: Channel, outer: boolean, dark: boolean): { spread: number; alpha: number } {
+  const neon = dark && outer;
+  return { spread: HALO_SPREAD[ch] * (neon ? NEON.spread : 1), alpha: HALO_ALPHA[ch] * (neon ? NEON.alpha : 1) };
+}
+
+/**
+ * Each form's filter area, relative to its own circle: just wide enough for
+ * its halo at the strongest hit (2.5 blur radii, where it has faded below
+ * 1%). A tight area keeps the browser's filter buffer small, so it renders
+ * at full display resolution even in fullscreen on large high-DPI screens
+ * (WebKit, for one, lowers the resolution of filters above ~4096² pixels).
+ */
+const regions = (spread: number) =>
+  Object.fromEntries(
+    (Object.keys(HALO_SPREAD) as Channel[]).map((ch) => {
+      const k = 1 + 2.5 * HALO_SPREAD[ch] * spread * 1.6; // half-size in radii
+      return [ch, { x: `${(-(k - 1) / 2) * 100}%`, y: `${(-(k - 1) / 2) * 100}%`, width: `${k * 100}%`, height: `${k * 100}%` }];
+    }),
+  ) as Record<Channel, { x: string; y: string; width: string; height: string }>;
+const FILTER_REGION = regions(1);
+/** Dark Mode's outermost form: wide enough for its neon halo. */
+const FILTER_REGION_NEON = regions(NEON.spread);
+
+/** Spring rate of size changes (rad/s); critically damped, so no bounce. */
+const SIZE_SPRING = 9;
+/** Swollen forms ease into this band instead of leaving the frame. */
+const SOFT_EDGE = 92;
+const HARD_EDGE = VIEW - 6;
+
+function capRadius(r: number): number {
+  if (r <= SOFT_EDGE) return r;
+  const room = HARD_EDGE - SOFT_EDGE;
+  return SOFT_EDGE + room * Math.tanh((r - SOFT_EDGE) / room);
+}
+
+interface Spring {
+  x: number;
+  v: number;
+}
+
+/** Larger forms first so smaller ones draw on top; ties keep the hierarchy. */
+function drawOrder(r: Record<Channel, number>): Channel[] {
+  return [...SIZE_PRIORITY].sort((a, b) => r[b] - r[a] || SIZE_PRIORITY.indexOf(a) - SIZE_PRIORITY.indexOf(b));
+}
+
+/** Turns only the off-centre gradient core; no scale, so a form is always a perfect circle. */
+function transformOf(ring: Ring): string {
+  return `rotate(${ring.tilt.toFixed(2)})`;
+}
+
+/**
+ * The artwork: exactly four soft color forms, one per instrument (see
+ * audio/channels.ts), each an SVG circle filled with its own radial gradient
+ * and wrapped in a filter that blurs its edge and adds a colored halo. All
+ * four share the artwork's exact centre; they are slightly elliptical about
+ * it, and only each gradient's core sits off-centre.
+ *
+ * Each form's base size comes from its instrument's active steps
+ * (presets/sizing.ts); when the pattern changes, the forms glide to their new
+ * sizes. With an animator, each form also reacts to its own instrument's
+ * sound events around its current base size: it swells, its halo brightens,
+ * its inner colors bloom outward, and the Snare and Clap briefly distort.
+ * A requestAnimationFrame loop runs only while a size is moving or sound
+ * events are pending or settling; at rest every attribute is written exactly.
+ */
+export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle, paused, className, label }: Props) {
+  const { theme } = useSettings(); // re-render with the theme's palette (Dark Mode: more saturated, with a soft contour)
+  const sizes = circleSizes(patterns, steps);
+  const sizeKey = CHANNELS.map((ch) => sizes[ch].toFixed(4)).join();
+  const rings = useMemo(() => buildRings(design, sizes), [design.seed, sizeKey]);
+  const byZone = useMemo(() => Object.fromEntries(rings.map((r) => [r.zone, r])) as Record<Channel, Ring>, [rings]);
+
+  const springs = useRef<Record<Channel, Spring> | null>(null);
+  if (!springs.current) springs.current = Object.fromEntries(rings.map((r) => [r.zone, { x: r.r, v: 0 }])) as Record<Channel, Spring>;
+  const [order, setOrder] = useState<Channel[]>(() => rings.map((r) => r.zone));
+  const orderRef = useRef(order);
+  orderRef.current = order;
+  const darkRef = useRef(theme === 'dark');
+  darkRef.current = theme === 'dark';
+
+  const refs = useRef<Partial<Record<Channel, SVGCircleElement | null>>>({});
+  const uid = useId().replace(/:/g, '');
+  const idOf = (kind: 'g' | 'f', ch: Channel) => `${kind}-${ch}-${uid}`;
+  const colorsRef = useRef(colors);
+  colorsRef.current = colors;
+  const ringsRef = useRef(byZone);
+  ringsRef.current = byZone;
+  const wakeRef = useRef<() => void>(() => {});
+
+
+  useEffect(() => {
+    let raf = 0;
+    let running = false;
+    let last = 0;
+    const sp = springs.current!;
+    const svg = refs.current.kick?.ownerSVGElement ?? null;
+    const part = (ch: Channel) => {
+      const g = svg?.querySelector(`#${idOf('g', ch)}`);
+      const f = svg?.querySelector(`#${idOf('f', ch)}`);
+      return {
+        stops: g ? [...g.querySelectorAll('stop')] : [],
+        halo: f?.querySelector('[data-part="halo"]') ?? null,
+        haloA: f?.querySelector('feFuncA') ?? null,
+        edge: f?.querySelector('[data-part="edge"]') ?? null,
+        sat: f?.querySelector('[data-part="sat"]') ?? null,
+        lum: f ? [...f.querySelectorAll('[data-part="lum"] > *')] : [],
+        tint: f?.querySelector('[data-part="tint"]') ?? null,
+      };
+    };
+    const parts = Object.fromEntries(CHANNELS.map((ch) => [ch, part(ch)])) as Record<Channel, ReturnType<typeof part>>;
+
+    /** Moves each base size toward its target; true while any is still moving. */
+    const advance = (dt: number): boolean => {
+      let moving = false;
+      for (const ch of CHANNELS) {
+        const s = sp[ch];
+        const target = ringsRef.current[ch].r;
+        const x = s.x - target;
+        if (Math.abs(x) < 0.005 && Math.abs(s.v) < 0.01) {
+          s.x = target;
+          s.v = 0;
+          continue;
+        }
+        const k = s.v + SIZE_SPRING * x;
+        const e = Math.exp(-SIZE_SPRING * dt);
+        s.x = target + (x + k * dt) * e;
+        s.v = (s.v - SIZE_SPRING * k * dt) * e;
+        moving = true;
+      }
+      return moving;
+    };
+
+    const apply = (t: number | null) => {
+      const overlap = overlapState(t === null || !animator ? null : (ch) => animator.presence(t, ch), sp, colorsRef.current);
+      for (const ch of CHANNELS) {
+        const el = refs.current[ch];
+        if (!el) continue;
+        const ring = ringsRef.current[ch];
+        const p = parts[ch];
+        const r0 = sp[ch].x;
+        const s = t === null || !animator ? null : animator.sample(t, ch);
+        const rest = !s || (s.swell === 0 && s.energy === 0);
+        const m = MOTION[ch];
+        const swell = rest ? 0 : s!.swell;
+        const energy = rest ? 0 : s!.energy;
+
+        el.setAttribute('data-r0', String(r0));
+        el.setAttribute('r', rest ? String(r0) : capRadius(r0 * (1 + m.growth * swell)).toFixed(4));
+        el.setAttribute('transform', transformOf(ring));
+        el.setAttribute('fill-opacity', rest ? String(ring.opacity) : Math.min(1, ring.opacity + m.fade * energy).toFixed(3));
+
+        // Inner colors spread toward the rim with the hit.
+        // The same stops as drawn (Dark Mode's contour adds one on some forms), so each offset lands on its own stop.
+        const stops = stopOffsets(ch, orderRef.current[0] === ch, darkRef.current);
+        stops.forEach(([off], i) => {
+          const last = i === stops.length - 1;
+          const o = rest || i === 0 || last ? off : Math.min(0.97, off + m.bloom * energy * (1 - off));
+          p.stops[i]?.setAttribute('offset', rest ? String(off) : o.toFixed(4));
+        });
+        const glow = glowOf(ch, orderRef.current[0] === ch, darkRef.current);
+        const haloA = Math.min(1, glow.alpha + m.halo * energy);
+        p.haloA?.setAttribute('slope', rest ? String(glow.alpha) : haloA.toFixed(3));
+        p.halo?.setAttribute('stdDeviation', (r0 * glow.spread * (1 + 0.6 * energy)).toFixed(3));
+        p.edge?.setAttribute('stdDeviation', (r0 * EDGE[ch]).toFixed(3));
+        el.setAttribute('data-glow', rest ? String(glow.alpha) : haloA.toFixed(3));
+
+        // Where this form overlaps other forms that are sounding with it.
+        const o = overlap[ch];
+        const quiet = o.intensity === 0 && o.mix === 0;
+        const sat = BASE_SAT * (1 + 0.45 * o.intensity + 0.15 * o.mix);
+        const lum = 1 + 0.07 * o.intensity;
+        p.sat?.setAttribute('values', quiet ? String(BASE_SAT) : sat.toFixed(4));
+        p.lum.forEach((fn) => fn.setAttribute('slope', quiet ? '1' : lum.toFixed(4)));
+        p.tint?.setAttribute('flood-color', o.tintColor);
+        p.tint?.setAttribute('flood-opacity', quiet ? '0' : o.tintOpacity.toFixed(4));
+        if (o.intensity > 0) p.haloA?.setAttribute('slope', Math.min(1, haloA + 0.12 * o.intensity).toFixed(3));
+        el.setAttribute('data-intensity', quiet ? '0' : o.intensity.toFixed(4));
+        el.setAttribute('data-mix', quiet ? '0' : o.mix.toFixed(4));
+      }
+      const next = drawOrder(Object.fromEntries(CHANNELS.map((ch) => [ch, sp[ch].x])) as Record<Channel, number>);
+      if (next.join() !== orderRef.current.join()) setOrder(next);
+    };
+
+    const frame = (now: number) => {
+      const dt = Math.min(0.05, Math.max(0, (now - last) / 1000));
+      last = now;
+      const moving = advance(dt);
+      const t = animator?.now() ?? audibleTime();
+      const sounding = !!animator && t !== null && (animator.isActive(t) || transport.isPlaying());
+      if (moving || sounding) {
+        apply(t);
+        raf = requestAnimationFrame(frame);
+      } else {
+        apply(null); // exact rest shape
+        running = false;
+      }
+    };
+
+    const wake = () => {
+      if (running) return;
+      running = true;
+      last = performance.now();
+      raf = requestAnimationFrame(frame);
+    };
+    wakeRef.current = wake;
+
+    const off = animator?.onWake(wake);
+    wake(); // events may already be queued when this graphic mounts
+    return () => {
+      off?.();
+      cancelAnimationFrame(raf);
+      wakeRef.current = () => {};
+      for (const ch of CHANNELS) {
+        sp[ch].x = ringsRef.current[ch].r;
+        sp[ch].v = 0;
+      }
+      apply(null); // leave the static rest shape behind
+    };
+  }, [animator]);
+
+  // A pattern edit, a new step count or a restored artwork: glide to the new sizes.
+  useEffect(() => wakeRef.current(), [rings]);
+
+  return (
+    <div className={`art-box${className ? ` ${className}` : ''}`} role="img" aria-label={label}>
+    <svg
+      className={`art${idle ? ' art--idle' : ''}${idle && paused ? ' art--paused' : ''}`}
+      viewBox={`${-INK} ${-INK} ${INK * 2} ${INK * 2}`}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <defs>
+        {CHANNELS.map((ch) => {
+          const ring = byZone[ch];
+          const g = gradientFor(colors[ch]);
+          const r0 = springs.current![ch].x;
+          const glow = glowOf(ch, order[0] === ch, theme === 'dark');
+          return (
+            <g key={ch}>
+              <radialGradient id={idOf('g', ch)} cx="0.5" cy="0.5" r="0.5" fx={0.5 + (ring.coreX - 0.5) * CORE_PULL} fy={0.5 + (ring.coreY - 0.5) * CORE_PULL}>
+                {stopColors(ch, order[0] === ch, g, theme === 'dark').map(([off, color, op], i) => (
+                  <stop key={i} offset={off} stopColor={color} stopOpacity={op} />
+                ))}
+              </radialGradient>
+              <filter id={idOf('f', ch)} {...(theme === 'dark' && order[0] === ch ? FILTER_REGION_NEON : FILTER_REGION)[ch]} colorInterpolationFilters="sRGB">
+                <feGaussianBlur data-part="halo" in="SourceGraphic" stdDeviation={r0 * glow.spread} result="halo" />
+                <feComponentTransfer in="halo" result="haloSoft">
+                  <feFuncA type="linear" slope={glow.alpha} />
+                </feComponentTransfer>
+                <feGaussianBlur data-part="edge" in="SourceGraphic" stdDeviation={r0 * EDGE[ch]} result="body" />
+                {/* Overlap response; neutral at rest (see overlapState). */}
+                <feColorMatrix data-part="sat" in="body" type="saturate" values={String(BASE_SAT)} result="bodySat" />
+                <feComponentTransfer in="bodySat" result="bodyPastel">
+                  <feFuncR type="linear" slope={PASTEL.slope} intercept={PASTEL.lift} />
+                  <feFuncG type="linear" slope={PASTEL.slope} intercept={PASTEL.lift} />
+                  <feFuncB type="linear" slope={PASTEL.slope} intercept={PASTEL.lift} />
+                </feComponentTransfer>
+                <feComponentTransfer data-part="lum" in="bodyPastel" result="bodyLum">
+                  <feFuncR type="linear" slope="1" />
+                  <feFuncG type="linear" slope="1" />
+                  <feFuncB type="linear" slope="1" />
+                </feComponentTransfer>
+                <feFlood data-part="tint" floodColor="#000000" floodOpacity="0" result="tint" />
+                <feComposite in="tint" in2="bodyLum" operator="in" result="tintIn" />
+                <feMerge>
+                  <feMergeNode in="haloSoft" />
+                  <feMergeNode in="bodyLum" />
+                  <feMergeNode in="tintIn" />
+                </feMerge>
+              </filter>
+            </g>
+          );
+        })}
+      </defs>
+      {order.map((zone) => {
+        const ring = byZone[zone];
+        const r0 = springs.current![zone].x;
+        return (
+          <g key={zone} className="form-drift">
+            <g className="form-breathe">
+              <circle
+                ref={(el) => {
+                  refs.current[zone] = el;
+                }}
+                data-zone={zone}
+                data-color={colors[zone]}
+                data-r0={r0}
+                data-target={ring.r}
+                data-glow={glowOf(zone, order[0] === zone, theme === 'dark').alpha}
+                cx={0}
+                cy={0}
+                r={r0}
+                transform={transformOf(ring)}
+                fill={`url(#${idOf('g', zone)})`}
+                fillOpacity={ring.opacity}
+                filter={`url(#${idOf('f', zone)})`}
+              />
+            </g>
+          </g>
+        );
+      })}
+    </svg>
+    </div>
+  );
+}
