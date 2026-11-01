@@ -161,7 +161,7 @@ const OUTLINE_WAVE = { near: 0.14, far: 0.75, lag: 0.07 };
  * into the black without filling the inside. While the circle sounds, the
  * glows brighten with the hits (`boost`) and settle back as the sound fades.
  */
-const NEON_GLOW = { near: 1.1, mid: 2.6, midAlpha: 1.5, wide: 8, wideAlpha: 0.75, far: 20, farAlpha: 0.5, boost: { mid: 0.5, wide: 0.7, far: 1 } };
+const NEON_GLOW = { near: 1.1, mid: 2.6, midAlpha: 1.5, wide: 9, wideAlpha: 1.05, far: 26, farAlpha: 0.8, boost: { mid: 0.5, wide: 0.7, far: 1 } };
 
 /** Dark Mode forms are drawn as outlines this wide (drawing units) instead of filled surfaces. */
 const DARK_FORM_STROKE = 2;
@@ -601,7 +601,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
-            <filter id={`aura-${uid}`} x="-40%" y="-40%" width="180%" height="180%" colorInterpolationFilters="sRGB">
+            <filter id={`aura-${uid}`} x="-50%" y="-50%" width="200%" height="200%" colorInterpolationFilters="sRGB">
               <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near} result="near" />
               <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid} result="midBlur" />
               <feComponentTransfer in="midBlur" result="mid">

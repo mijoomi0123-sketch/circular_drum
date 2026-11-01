@@ -31,11 +31,10 @@ const TONES: (keyof GradientFamily)[] = ['base', 'rich', 'light', 'base'];
 /**
  * The rings for one artwork, kept to the few that carry the motion (the four
  * forms are outlines themselves, so with these the whole circle is about
- * nine lines):
+ * seven lines):
  *
  *   - 1 small ring near the centre, linking it to the innermost form;
- *   - 1 echo just outside the outermost form, which a hit pushes out first;
- *   - 1–2 wider wave rings beyond it, which a hit carries furthest.
+ *   - 1–2 wave rings beyond the outermost form, which a hit carries furthest.
  *
  * Every ring reacts to the sound (see applyOutlines in ArtworkGraphic).
  */
@@ -64,8 +63,6 @@ export function buildOutlineRings(seed: number, forms: readonly Ring[]): Outline
   // Centre: one ring halfway inside the smallest form, so the middle is not empty.
   push(innermost.zone, innermost.r * between(0.4, 0.55), between(0.7, 0.9), 0);
 
-  // Echo of the outermost form, just outside it.
-  push(outermost.zone, outermost.r * between(1.08, 1.14), between(0.75, 0.95), 0.3);
 
   // Wave rings beyond it, at uneven gaps, fading as they go.
   const n = 1 + Math.floor(rnd() * 2);

@@ -9,13 +9,13 @@ describe('Dark Mode outline rings', () => {
   it('are the same for the same artwork', () => {
     expect(buildOutlineRings(7, forms(7))).toEqual(buildOutlineRings(7, forms(7)));
   });
-  it('are only a few, each with a role: centre link, outer echo, 1–2 waves; never past the drawing', () => {
+  it('are only a few, each with a role: centre link and 1–2 waves; never past the drawing', () => {
     for (let seed = 1; seed < 60; seed++) {
       const f = forms(seed);
       const rings = buildOutlineRings(seed, f);
       const [outer, inner] = [f[0], f[f.length - 1]];
-      expect(rings.length).toBeGreaterThanOrEqual(3);
-      expect(rings.length).toBeLessThanOrEqual(4);
+      expect(rings.length).toBeGreaterThanOrEqual(2);
+      expect(rings.length).toBeLessThanOrEqual(3);
       expect(rings.filter((o) => o.r < inner.r)).toHaveLength(1);
       expect(rings.filter((o) => o.r > outer.r).length).toBe(rings.length - 1);
       for (const o of rings) {
