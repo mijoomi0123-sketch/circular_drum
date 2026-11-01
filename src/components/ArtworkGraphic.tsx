@@ -168,10 +168,10 @@ const DARK_FORM_STROKE = 2;
 
 /**
  * Dark Mode playing feedback: at a full hit a form grows by 30% of its radius
- * or 20 units, whichever is more (so even the smallest form clearly grows),
- * and its outline gets up to 2.5× thicker.
+ * or 20 units, whichever is more (so even the smallest form clearly grows).
+ * Its outline keeps the same thin weight; the light around it does the rest.
  */
-const DARK_HIT = { share: 0.3, min: 20, stroke: 1.5 };
+const DARK_HIT = { share: 0.3, min: 20 };
 
 /**
  * Dark Mode: the least black space between the strokes of two neighbouring
@@ -347,23 +347,28 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
       }
       svg?.setAttribute('data-neon', glow.toFixed(4));
 
+      // In Fullscreen the playing circle is scaled up as a whole (.fs-hit.is-sounding, --boost);
+      // strokes are divided by that scale too, so they keep their resting weight on screen.
+      const hit = svg?.closest('.fs-hit');
+      const k = live && hit?.classList.contains('is-sounding') ? Number((hit as HTMLElement).style.getPropertyValue('--boost')) || 1 : 1;
+      for (const ch of CHANNELS) {
+        const w = (DARK_FORM_STROKE / k).toFixed(4);
+        if (refs.current[ch]?.getAttribute('stroke-width') !== w) refs.current[ch]?.setAttribute('stroke-width', w);
+      }
+
       // Every line of the circle in rest order, pushed apart where they would meet.
       const lines = [
         ...CHANNELS.map((ch) => {
           const el = refs.current[ch];
           return { rest: sp[ch].x, r: Number(el?.getAttribute('r') ?? sp[ch].x), w: Number(el?.getAttribute('stroke-width') ?? DARK_FORM_STROKE), form: ch as Channel | null, i: -1 };
         }),
-        ...list.map((o, i) => ({ rest: o.r, r: want[i].r, w: live ? o.width * (1 + 0.7 * want[i].energy) : o.width, form: null as Channel | null, i })),
+        ...list.map((o, i) => ({ rest: o.r, r: want[i].r, w: o.width, form: null as Channel | null, i })),
       ].sort((a, b) => a.rest - b.rest);
-      // A ring is drawn scaled, so its stroke widens with it.
-      const drawnW = (line: (typeof lines)[number]) => (line.form ? line.w : (line.w * line.r) / list[line.i].r);
-      // Clear black space between neighbours, measured between the edges of their strokes.
+      // Clear black space between neighbours, measured between the edges of their strokes
+      // (every stroke keeps its resting width, see below).
       for (let k = 1; k < lines.length; k++) {
         const [a, b] = [lines[k - 1], lines[k]];
-        const least = a.r + drawnW(a) / 2 + (a.form && b.form ? RING_CLEAR : RING_CLEAR_WIDE);
-        // Solve r − (w·r/r₀)/2 ≥ least for a ring (its stroke grows with r); a form's stroke does not.
-        const need = b.form ? least + b.w / 2 : least / (1 - b.w / (2 * list[b.i].r));
-        b.r = Math.max(b.r, need);
+        b.r = Math.max(b.r, a.r + a.w / 2 + (a.form && b.form ? RING_CLEAR : RING_CLEAR_WIDE) + b.w / 2);
       }
       for (const line of lines) {
         if (line.form) {
@@ -379,7 +384,8 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         if (!live && Math.abs(line.r - o.r) < 1e-4) el.removeAttribute('transform');
         else el.setAttribute('transform', `scale(${(line.r / o.r).toFixed(5)})`);
         stroke?.setAttribute('stroke-opacity', live ? Math.min(1, o.opacity * (1 + 0.8 * energy)).toFixed(3) : String(o.opacity));
-        stroke?.setAttribute('stroke-width', live ? (o.width * (1 + 0.7 * energy)).toFixed(3) : String(o.width));
+        // A ring is drawn scaled; dividing its stroke by the scale keeps it exactly as thin as at rest.
+        stroke?.setAttribute('stroke-width', (o.width / (line.r / o.r) / k).toFixed(4));
         el.setAttribute('data-wave', wave.toFixed(4));
       }
     };
@@ -406,7 +412,6 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
           const raw = rest && !(t !== null && animator) ? 0 : Math.max(Math.max(0, swell), animator && t !== null ? animator.presence(t, ch) : 0);
           const act = raw < 0.002 ? 0 : Math.min(1.1, Math.sqrt(raw));
           el.setAttribute('r', act === 0 ? String(r0) : capRadius(r0 + act * Math.max(r0 * DARK_HIT.share, DARK_HIT.min)).toFixed(4));
-          el.setAttribute('stroke-width', act === 0 ? String(DARK_FORM_STROKE) : (DARK_FORM_STROKE * (1 + DARK_HIT.stroke * act)).toFixed(3));
           el.setAttribute('data-hit', act.toFixed(4));
         } else {
           el.setAttribute('r', rest ? String(r0) : capRadius(r0 * (1 + m.growth * swell)).toFixed(4));
