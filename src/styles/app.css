@@ -1909,3 +1909,34 @@ select {
     transition-delay: 0s;
   }
 }
+
+/*
+ * Dark Mode outline rings (presets/outlineRings.ts): while an artwork moves,
+ * each ring slowly breathes outward and drifts on its own period and phase,
+ * so the layers spread independently and calmly. Still artworks hold them still.
+ */
+.outline-ring {
+  transform-box: view-box;
+  transform-origin: 0 0;
+}
+
+.art--live .outline-ring {
+  animation: ring-spread 10s ease-in-out infinite alternate;
+}
+
+@keyframes ring-spread {
+  from {
+    transform: translate(0, 0) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translate(var(--dx), var(--dy)) scale(calc(1 + var(--grow)));
+    opacity: 0.72;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .art--live .outline-ring {
+    animation: none;
+  }
+}

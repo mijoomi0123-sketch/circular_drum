@@ -1,10 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { audibleTime } from '../animation/clock';
 import type { DropletAnimator } from '../animation/droplet';
 import { MOTION } from '../animation/visualEvents';
 import { CHANNELS } from '../audio/channels';
 import { transport } from '../audio/transport';
 import { buildRings } from '../presets/designs';
+import { buildOutlineRings } from '../presets/outlineRings';
 import { overlapState } from '../animation/overlap';
 import { darkContour, darkLift, gradientFor, GRADIENTS, type ColorStop, type GradientFamily } from '../presets/gradients';
 import { useSettings } from '../storage/settingsStore';
@@ -194,6 +195,8 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
   const sizeKey = CHANNELS.map((ch) => sizes[ch].toFixed(4)).join();
   const rings = useMemo(() => buildRings(design, sizes), [design.seed, sizeKey]);
   const byZone = useMemo(() => Object.fromEntries(rings.map((r) => [r.zone, r])) as Record<Channel, Ring>, [rings]);
+  const dark = theme === 'dark';
+  const outlines = useMemo(() => (dark ? buildOutlineRings(design.seed, rings) : []), [dark, design.seed, rings]);
 
   const springs = useRef<Record<Channel, Spring> | null>(null);
   if (!springs.current) springs.current = Object.fromEntries(rings.map((r) => [r.zone, { x: r.r, v: 0 }])) as Record<Channel, Spring>;
@@ -349,7 +352,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
   return (
     <div className={`art-box${className ? ` ${className}` : ''}`} role="img" aria-label={label}>
     <svg
-      className={`art${idle ? ' art--idle' : ''}${idle && paused ? ' art--paused' : ''}`}
+      className={`art${idle ? ' art--idle' : ''}${idle && paused ? ' art--paused' : ''}${animator && !paused ? ' art--live' : ''}`}
       viewBox={`${-INK} ${-INK} ${INK * 2} ${INK * 2}`}
       aria-hidden="true"
       focusable="false"
@@ -396,6 +399,17 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
             </g>
           );
         })}
+        {dark && (
+          // A soft neon bloom around the outline rings, in their own colors.
+          <filter id={`rings-${uid}`} x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1.6" result="bloom" />
+            <feMerge>
+              <feMergeNode in="bloom" />
+              <feMergeNode in="bloom" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        )}
       </defs>
       {order.map((zone) => {
         const ring = byZone[zone];
@@ -424,6 +438,27 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
           </g>
         );
       })}
+      {dark && (
+        // Dark Mode only: thin concentric outlines over and around the forms (presets/outlineRings.ts).
+        <g className="outline-rings" filter={`url(#rings-${uid})`}>
+          {outlines.map((o, i) => (
+            <g key={i} className="outline-ring" style={{ '--grow': o.grow, '--dx': `${o.dx}px`, '--dy': `${o.dy}px`, animationDuration: `${o.period.toFixed(2)}s`, animationDelay: `${o.delay.toFixed(2)}s` } as CSSProperties}>
+              <ellipse
+                data-zone={o.zone}
+                cx={o.cx}
+                cy={o.cy}
+                rx={o.rx}
+                ry={o.ry}
+                transform={`rotate(${o.rotate.toFixed(1)})`}
+                fill="none"
+                stroke={gradientFor(colors[o.zone])[o.tone]}
+                strokeWidth={o.width}
+                strokeOpacity={o.opacity}
+              />
+            </g>
+          ))}
+        </g>
+      )}
     </svg>
     </div>
   );
