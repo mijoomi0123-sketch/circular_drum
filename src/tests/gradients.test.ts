@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brightenHex, DARK_BRIGHTNESS, DARK_HUE, DARK_SATURATION, GRADIENTS, GRADIENTS_DARK, gradientFor, saturateHex, withHue } from '../presets/gradients';
+import { brightenHex, DARK_BRIGHTNESS, DARK_HUE, DARK_MUTE, DARK_SATURATION, GRADIENTS, GRADIENTS_DARK, gradientFor, muteHex, saturateHex, withHue } from '../presets/gradients';
 
 function hue(hex: string): number {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -49,14 +49,14 @@ describe('theme palettes', () => {
         if (s0 > 0.05) expect(Math.abs(((h1 - h0 + 540) % 360) - 180), `${id} ${tone} hue`).toBeLessThan(3);
         const lit = brightenHex(sat, DARK_BRIGHTNESS);
         const h = DARK_HUE[id as keyof typeof GRADIENTS];
-        expect(GRADIENTS_DARK[id as keyof typeof GRADIENTS][tone as keyof typeof g]).toBe(h === undefined ? lit : withHue(lit, h));
+        expect(GRADIENTS_DARK[id as keyof typeof GRADIENTS][tone as keyof typeof g]).toBe(muteHex(h === undefined ? lit : withHue(lit, h), 0.85, 0.8));
       }
     }
     expect(brightenHex('#806040', 1.2)).toBe('#9A734D');
     expect(brightenHex('#F0A000', 1.2)).toBe('#FFC000');
   });
   it('is always derived from the Light palette, never compounding', () => {
-    expect(gradientFor('orange', 'dark').base).toBe(brightenHex(saturateHex(GRADIENTS.orange.base, DARK_SATURATION), DARK_BRIGHTNESS));
+    expect(gradientFor('orange', 'dark').base).toBe(muteHex(brightenHex(saturateHex(GRADIENTS.orange.base, DARK_SATURATION), DARK_BRIGHTNESS), 0.85, 0.8));
     expect(gradientFor('blue', 'dark').base).toBe(gradientFor('blue', 'dark').base);
     expect(gradientFor('blue', 'light').base).toBe('#ADDBFB');
   });
@@ -71,5 +71,17 @@ describe('theme palettes', () => {
     expect(withHue('#FF0000', 120)).toBe('#00FF00');
     expect(withHue('#80FFC0', 240)).toBe('#8080FF');
     expect(gradientFor('green', 'light').base).toBe('#ADF0E4');
+  });
+  it('Dark Mode tones are deeper and muted (value ×0.8, saturation ×0.85, same hue)', () => {
+    expect(DARK_MUTE).toEqual({ saturation: 0.85, value: 0.8 });
+    expect(muteHex('#FF0000', 0.85, 0.8)).toBe('#CC1F1F');
+    expect(muteHex('#FFFFFF', 0.85, 0.8)).toBe('#CCCCCC');
+    expect(muteHex('#000000', 0.85, 0.8)).toBe('#000000');
+    for (const g of Object.values(GRADIENTS_DARK)) for (const tone of ['light', 'base', 'rich', 'deep'] as const) {
+      const n = Number.parseInt(g[tone].slice(1), 16);
+      expect(Math.max((n >> 16) & 255, (n >> 8) & 255, n & 255)).toBeLessThanOrEqual(204);
+    }
+    const [hg, hb] = [hue(GRADIENTS_DARK.green.base), hue(GRADIENTS_DARK.blue.base)];
+    expect(hb - hg).toBeGreaterThanOrEqual(50);
   });
 });
