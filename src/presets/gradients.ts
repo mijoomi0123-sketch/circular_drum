@@ -263,7 +263,8 @@ const rgbOf = (hex: string) => {
 const hexOf = (rgb: number[]) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
 /** `k` of the way toward black (the Dark Mode canvas). */
 const shadeHex = (hex: string, k: number) => hexOf(rgbOf(hex).map((c) => c * (1 - k)));
-const mixHex = (a: string, b: string, f: number) => {
+/** `f` of the way from color `a` to color `b`. */
+export const mixHex = (a: string, b: string, f: number) => {
   const y = rgbOf(b);
   return hexOf(rgbOf(a).map((c, k) => c + (y[k] - c) * f));
 };

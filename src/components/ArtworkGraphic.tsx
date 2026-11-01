@@ -7,7 +7,7 @@ import { transport } from '../audio/transport';
 import { buildRings } from '../presets/designs';
 import { buildOutlineRings, DARK_FORM_STROKE, darkSizes, PAIR_CLEAR } from '../presets/outlineRings';
 import { overlapState } from '../animation/overlap';
-import { darkContour, darkLift, gradientFor, GRADIENTS, type ColorStop, type GradientFamily } from '../presets/gradients';
+import { darkContour, darkLift, gradientFor, GRADIENTS, mixHex, type ColorStop, type GradientFamily } from '../presets/gradients';
 import { useSettings } from '../storage/settingsStore';
 import { activeSteps, circleSizes, SIZE_PRIORITY } from '../presets/sizing';
 import type { ArtworkDesign, Channel, ChannelColors, ChannelPatterns, Ring } from '../types';
@@ -40,7 +40,8 @@ interface Props {
   motion?: number;
 }
 
-type Stop = [offset: number, tone: keyof GradientFamily, opacity: number];
+/** A stop: offset, tone, opacity, and optionally how far (0–1) the tone is softened toward the family's base tone. */
+type Stop = [offset: number, tone: keyof GradientFamily, opacity: number, soften?: number];
 
 /**
  * Inside of each form, from its core (offset 0) to its rim (offset 1):
@@ -48,7 +49,7 @@ type Stop = [offset: number, tone: keyof GradientFamily, opacity: number];
  *   kick   dense: a deep core spreading through rich and base to a light rim
  *   snare  energetic: a luminous light core inside a saturated body
  *   hihat  airy: a lighter membrane whose color gathers at the rim
- *   clap   solid: one even rich tone from the centre to its rim (no paler centre)
+ *   clap   its rich tone, the centre only a touch lighter (CENTRE_SOFT), deepening into the ring
  *
  * The outermost form holds its colors to a clean, precise silhouette (the
  * edge blur only anti-aliases). Every form inside it thins out over its last
@@ -59,6 +60,8 @@ type Stop = [offset: number, tone: keyof GradientFamily, opacity: number];
  * Every stop is a tone of the instrument's own color family, so a form never
  * shows a hue from another color.
  */
+/** How much lighter the innermost circle's centre is than its ring (fraction toward the base tone). */
+const CENTRE_SOFT = 0.3;
 const STOPS: Record<Channel, { outer: Stop[]; inner: Stop[] }> = {
   kick: {
     outer: [[0, 'deep', 1], [0.32, 'rich', 1], [0.62, 'base', 1], [0.82, 'base', 1], [0.93, 'rich', 0.96], [1, 'base', 0.9]],
@@ -72,11 +75,11 @@ const STOPS: Record<Channel, { outer: Stop[]; inner: Stop[] }> = {
     outer: [[0, 'base', 0.9], [0.45, 'base', 0.88], [0.72, 'base', 0.86], [0.86, 'base', 0.84], [0.95, 'rich', 0.8], [1, 'rich', 0.76]],
     inner: [[0, 'base', 0.9], [0.42, 'base', 0.88], [0.66, 'base', 0.8], [0.8, 'base', 0.6], [0.92, 'rich', 0.25], [1, 'rich', 0]],
   },
-  // The innermost circle is one solid color, its rich tone, from the centre out to its rim, so the
-  // centre is filled with exactly the color of the ring around it (no paler or white spot in the middle).
+  // The innermost circle is its own rich tone; only the centre is a touch lighter (CENTRE_SOFT of the
+  // way toward the base tone), deepening smoothly into the ring. Never white, never a flat disc.
   clap: {
-    outer: [[0, 'rich', 1], [0.26, 'rich', 1], [0.6, 'rich', 1], [0.8, 'rich', 1], [0.93, 'rich', 0.94], [1, 'rich', 0.88]],
-    inner: [[0, 'rich', 1], [0.24, 'rich', 1], [0.54, 'rich', 1], [0.72, 'rich', 0.8], [0.88, 'rich', 0.35], [1, 'rich', 0]],
+    outer: [[0, 'rich', 1, CENTRE_SOFT], [0.26, 'rich', 1, CENTRE_SOFT], [0.6, 'rich', 1], [0.8, 'rich', 1], [0.93, 'rich', 0.94], [1, 'rich', 0.88]],
+    inner: [[0, 'rich', 1, CENTRE_SOFT], [0.24, 'rich', 1, CENTRE_SOFT], [0.54, 'rich', 1], [0.72, 'rich', 0.8], [0.88, 'rich', 0.35], [1, 'rich', 0]],
   },
 };
 /** The outermost form keeps a clean silhouette; forms inside it thin out over their last quarter and melt into the color around them. */
@@ -84,7 +87,7 @@ const stopsOf = (ch: Channel, outer: boolean) => (outer ? STOPS[ch].outer : STOP
 
 /** Stop colors and opacities of a form; in Dark Mode the outermost one gets its soft contour (see darkContour). */
 function stopColors(ch: Channel, outer: boolean, g: GradientFamily, dark: boolean): ColorStop[] {
-  const stops: ColorStop[] = stopsOf(ch, outer).map(([o, t, a]) => [o, g[t], a]);
+  const stops: ColorStop[] = stopsOf(ch, outer).map(([o, t, a, soft]) => [o, soft ? mixHex(g[t], g.base, soft) : g[t], a]);
   return dark && outer ? darkContour(darkLift(stops, g.light)) : stops;
 }
 const stopOffsets = (ch: Channel, outer: boolean, dark: boolean) => stopColors(ch, outer, GRADIENTS.orange, dark);
