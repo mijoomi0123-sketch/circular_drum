@@ -389,7 +389,7 @@ input:focus-visible {
 }
 
 .le-size-pad i.is-on {
-  background: #555555; /* chosen grid size: a dark gray, softer than black */
+  background: #8C8C8C; /* chosen grid size: a mid gray, softer than black */
 }
 
 /* Dark Mode keeps the chosen dots light on black. */
