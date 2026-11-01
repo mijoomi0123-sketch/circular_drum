@@ -785,7 +785,7 @@ input:focus-visible {
 
 .fs-show {
   height: 34px;
-  border-radius: 17px;
+  border-radius: 8px; /* softly rounded, not a full pill */
   border: 1px solid var(--ink);
   background: var(--ink);
   color: var(--canvas);
