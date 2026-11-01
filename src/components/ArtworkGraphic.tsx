@@ -157,6 +157,9 @@ const OUTLINE_WAVE = { near: 0.14, far: 0.75, lag: 0.07 };
 /** Their neon: a tight bloom, and a wide one strengthened by `farAlpha` (blur radii in drawing units). */
 const OUTLINE_GLOW = { near: 1.1, far: 4.5, farAlpha: 2.2 };
 
+/** Dark Mode forms are drawn as outlines this wide (drawing units) instead of filled surfaces. */
+const DARK_FORM_STROKE = 2;
+
 /** Spring rate of size changes (rad/s); critically damped, so no bounce. */
 const SIZE_SPRING = 9;
 /** Swollen forms ease into this band instead of leaving the frame. */
@@ -496,7 +499,10 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
                 cy={0}
                 r={r0}
                 transform={transformOf(ring)}
-                fill={`url(#${idOf('g', zone)})`}
+                // Dark Mode: no filled surface, only the form's glowing outline (rings fill the inside).
+                fill={dark ? 'none' : `url(#${idOf('g', zone)})`}
+                stroke={dark ? gradientFor(colors[zone]).base : undefined}
+                strokeWidth={dark ? DARK_FORM_STROKE : undefined}
                 fillOpacity={ring.opacity}
                 filter={`url(#${idOf('f', zone)})`}
               />

@@ -75,6 +75,15 @@ export function buildOutlineRings(seed: number, forms: readonly Ring[]): Outline
     for (let i = 0; i < n; i++) push(form.zone, form.r * between(0.7, 1.08), between(0.7, 0.95), 0);
   }
 
+  // The forms have no filled surface in Dark Mode, so rings carry the inside too:
+  // the outermost form's interior, from near the centre outward, at uneven gaps.
+  const inner = 3 + Math.floor(outermost.r / 16) + Math.floor(rnd() * 2);
+  for (let i = 0; i < inner; i++) {
+    const at = 0.1 + (0.6 * (i + between(0.15, 0.85))) / inner;
+    const form = [...forms].sort((a, b) => a.r - b.r).find((f) => f.r >= outermost.r * at * 1.05) ?? outermost;
+    push(form.zone, outermost.r * at, between(0.6, 0.9), 0);
+  }
+
   // Wider rings spreading outward from the outermost form, at uneven, growing gaps.
   const n = 2 + Math.floor(rnd() * 3);
   let r = outermost.r;
