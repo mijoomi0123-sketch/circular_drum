@@ -5,7 +5,7 @@ import { MOTION } from '../animation/visualEvents';
 import { CHANNELS } from '../audio/channels';
 import { transport } from '../audio/transport';
 import { buildRings } from '../presets/designs';
-import { buildOutlineRings } from '../presets/outlineRings';
+import { buildOutlineRings, PAIR_CLEAR } from '../presets/outlineRings';
 import { overlapState } from '../animation/overlap';
 import { darkContour, darkLift, gradientFor, GRADIENTS, type ColorStop, type GradientFamily } from '../presets/gradients';
 import { useSettings } from '../storage/settingsStore';
@@ -182,8 +182,10 @@ const DARK_MOTION: Partial<Record<Channel, number>> = { kick: 0.85 };
  * forms keep at rest (6 × the artwork scale, 0.95–1), so rest sizes never move.
  */
 const RING_CLEAR = 3.5;
-/** Next to a ring (whose neon bloom is wider), the clear space is wider too. */
-const RING_CLEAR_WIDE = 8;
+/** How far (drawing units) an inner companion ring swells with its own instrument's hit. */
+const PAIR_SWELL = 3;
+/** Dark Mode draws the whole circle a little smaller; strokes and glow keep their on-screen weight. */
+export const DARK_SCALE = 0.9;
 
 
 /** Spring rate of size changes (rad/s); critically damped, so no bounce. */
@@ -320,6 +322,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
       const now = performance.now() / 1000;
       const want = list.map((o) => {
         if (!live) return { r: o.r, wave: 0, energy: 0 };
+        const outer = o === list[0];
         const out = Math.max(0, o.r / outerR - 0.85); // 0 near the forms, up to ~0.9 for the farthest ring
         const lag = OUTLINE_WAVE.lag * (o.r / outerR); // seconds: the wave reaches outer rings later
         let own = 0;
@@ -332,6 +335,8 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
           all = Math.max(all, v);
           energy = Math.max(energy, s.energy);
         }
+        // An inner pair's ring follows only its own instrument, riding just outside its form.
+        if (!outer) return { r: o.r + own * PAIR_SWELL, wave: own, energy };
         const wave = 0.65 * own + 0.35 * all;
         const breathe = o.grow * 0.35 * Math.sin((2 * Math.PI * now) / o.period + o.delay);
         return { r: o.r * (1 + breathe + wave * (OUTLINE_WAVE.near + OUTLINE_WAVE.far * out)), wave, energy };
@@ -352,7 +357,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
       // In Fullscreen the playing circle is scaled up as a whole (.fs-hit.is-sounding, --boost);
       // strokes are divided by that scale too, so they keep their resting weight on screen.
       const hit = svg?.closest('.fs-hit');
-      const k = live && hit?.classList.contains('is-sounding') ? Number((hit as HTMLElement).style.getPropertyValue('--boost')) || 1 : 1;
+      const k = (live && hit?.classList.contains('is-sounding') ? Number((hit as HTMLElement).style.getPropertyValue('--boost')) || 1 : 1) * DARK_SCALE;
       for (const ch of CHANNELS) {
         const w = (DARK_FORM_STROKE / k).toFixed(4);
         if (refs.current[ch]?.getAttribute('stroke-width') !== w) refs.current[ch]?.setAttribute('stroke-width', w);
@@ -362,15 +367,15 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
       const lines = [
         ...CHANNELS.map((ch) => {
           const el = refs.current[ch];
-          return { rest: sp[ch].x, r: Number(el?.getAttribute('r') ?? sp[ch].x), w: Number(el?.getAttribute('stroke-width') ?? DARK_FORM_STROKE), form: ch as Channel | null, i: -1 };
+          return { rest: sp[ch].x, r: Number(el?.getAttribute('r') ?? sp[ch].x), w: DARK_FORM_STROKE, form: ch as Channel | null, zone: ch as Channel, i: -1 };
         }),
-        ...list.map((o, i) => ({ rest: o.r, r: want[i].r, w: o.width, form: null as Channel | null, i })),
+        ...list.map((o, i) => ({ rest: o.r, r: want[i].r, w: o.width, form: null as Channel | null, zone: o.zone, i })),
       ].sort((a, b) => a.rest - b.rest);
       // Clear black space between neighbours, measured between the edges of their strokes
       // (every stroke keeps its resting width, see below).
       for (let k = 1; k < lines.length; k++) {
         const [a, b] = [lines[k - 1], lines[k]];
-        b.r = Math.max(b.r, a.r + a.w / 2 + (a.form && b.form ? RING_CLEAR : RING_CLEAR_WIDE) + b.w / 2);
+        b.r = Math.max(b.r, a.r + a.w / 2 + (a.zone === b.zone ? PAIR_CLEAR : RING_CLEAR) + b.w / 2);
       }
       for (const line of lines) {
         if (line.form) {
@@ -519,7 +524,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
             // Dark Mode: no filled surface, only the form's glowing outline (rings fill the inside).
             fill={dark ? 'none' : `url(#${idOf('g', zone)})`}
             stroke={dark ? gradientFor(colors[zone]).base : undefined}
-            strokeWidth={dark ? DARK_FORM_STROKE : undefined}
+            strokeWidth={dark ? DARK_FORM_STROKE / DARK_SCALE : undefined}
             fillOpacity={ring.opacity}
             // Dark Mode's light comes from the shared neon filters around the lines.
             filter={dark ? undefined : `url(#${idOf('f', zone)})`}
@@ -538,7 +543,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         ringEls.current[i] = el;
       }}
     >
-      <circle cx={0} cy={0} r={o.r} fill="none" stroke={gradientFor(colors[o.zone])[o.tone]} strokeWidth={o.width} strokeOpacity={o.opacity} />
+      <circle cx={0} cy={0} r={o.r} fill="none" stroke={gradientFor(colors[o.zone])[o.tone]} strokeWidth={o.width / DARK_SCALE} strokeOpacity={o.opacity} />
     </g>
   );
 
@@ -598,8 +603,8 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
                 every line gets a tight bloom and a close glow; the outer lines also a wide diffuse light that
                 fades gradually into the black (see NEON_GLOW). */}
             <filter id={`neon-${uid}`} x="-15%" y="-15%" width="130%" height="130%" colorInterpolationFilters="sRGB">
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near} result="near" />
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid} result="midBlur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near / DARK_SCALE} result="near" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid / DARK_SCALE} result="midBlur" />
               <feComponentTransfer in="midBlur" result="mid">
                 <feFuncA data-part="neon-mid" type="linear" slope={NEON_GLOW.midAlpha} />
               </feComponentTransfer>
@@ -611,16 +616,16 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
               </feMerge>
             </filter>
             <filter id={`aura-${uid}`} x="-50%" y="-50%" width="200%" height="200%" colorInterpolationFilters="sRGB">
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near} result="near" />
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid} result="midBlur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near / DARK_SCALE} result="near" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid / DARK_SCALE} result="midBlur" />
               <feComponentTransfer in="midBlur" result="mid">
                 <feFuncA data-part="neon-mid" type="linear" slope={NEON_GLOW.midAlpha} />
               </feComponentTransfer>
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.wide} result="wideBlur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.wide / DARK_SCALE} result="wideBlur" />
               <feComponentTransfer in="wideBlur" result="wide">
                 <feFuncA data-part="neon-wide" type="linear" slope={NEON_GLOW.wideAlpha} />
               </feComponentTransfer>
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.far} result="farBlur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.far / DARK_SCALE} result="farBlur" />
               <feComponentTransfer in="farBlur" result="far">
                 <feFuncA data-part="neon-far" type="linear" slope={NEON_GLOW.farAlpha} />
               </feComponentTransfer>
@@ -637,7 +642,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         )}
       </defs>
       {dark ? (
-        <>
+        <g className="dark-scale" transform={`scale(${DARK_SCALE})`}>
           {/* Inner lines: crisp neon with a close glow, so the inside stays dark and open. */}
           <g className="neon" filter={`url(#neon-${uid})`}>
             {order.slice(1).map(formEl)}
@@ -648,7 +653,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
             {formEl(order[0])}
             {outlines.map((o, i) => (o.r >= outerFormR ? ringEl(o, i) : null))}
           </g>
-        </>
+        </g>
       ) : (
         order.map(formEl)
       )}

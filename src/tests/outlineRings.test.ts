@@ -9,24 +9,18 @@ describe('Dark Mode outline rings', () => {
   it('are the same for the same artwork', () => {
     expect(buildOutlineRings(7, forms(7))).toEqual(buildOutlineRings(7, forms(7)));
   });
-  it('counted from the outside: Kick, Kick, Snare (third), Hi-hat; then the forms', () => {
-    for (let seed = 1; seed < 60; seed++) {
-      const f = forms(seed);
-      const outer = buildOutlineRings(seed, f).filter((o) => o.r > f[0].r).sort((a, b) => b.r - a.r);
-      expect(outer.map((o) => o.zone)).toEqual(['kick', 'kick', 'snare', 'hihat']);
-    }
-  });
-  it('are only a few, each with a role: centre link and four outer rings; never past the drawing', () => {
+  it('one ring per instrument, just outside its own form, in the form\'s color: pairs Kick, Snare, Hi-hat, Clap', () => {
     for (let seed = 1; seed < 60; seed++) {
       const f = forms(seed);
       const rings = buildOutlineRings(seed, f);
-      const [outer, inner] = [f[0], f[f.length - 1]];
-      expect(rings.length).toBe(5);
-      expect(rings.filter((o) => o.r < inner.r)).toHaveLength(1);
-      expect(rings.filter((o) => o.r > outer.r).length).toBe(rings.length - 1);
+      expect(rings.map((o) => o.zone)).toEqual(['kick', 'snare', 'hihat', 'clap']);
+      // All eight lines from the outside: each pair stays together, no other line between.
+      const lines = [...f.map((x) => ({ zone: x.zone, r: x.r })), ...rings.map((o) => ({ zone: o.zone, r: o.r }))].sort((a, b) => b.r - a.r);
+      expect(lines.map((l) => l.zone)).toEqual(['kick', 'kick', 'snare', 'snare', 'hihat', 'hihat', 'clap', 'clap']);
       for (const o of rings) {
-        expect(o.r * (1 + o.grow) + 4).toBeLessThan(200);
+        expect(o.tone).toBe('base');
         expect(o.r).toBeLessThanOrEqual(MAX_RING_R);
+        expect(o.r * (1 + o.grow) + 4).toBeLessThan(200);
       }
     }
   });
