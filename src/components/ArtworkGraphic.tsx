@@ -48,7 +48,7 @@ type Stop = [offset: number, tone: keyof GradientFamily, opacity: number];
  *   kick   dense: a deep core spreading through rich and base to a light rim
  *   snare  energetic: a luminous light core inside a saturated body
  *   hihat  airy: a lighter membrane whose color gathers at the rim
- *   clap   bright: a glowing core opening into its base and rich tones
+ *   clap   bright: its own color right to the centre, deepening into its rich tone
  *
  * The outermost form holds its colors to a clean, precise silhouette (the
  * edge blur only anti-aliases). Every form inside it thins out over its last
@@ -65,16 +65,17 @@ const STOPS: Record<Channel, { outer: Stop[]; inner: Stop[] }> = {
     inner: [[0, 'deep', 1], [0.3, 'rich', 1], [0.56, 'base', 1], [0.74, 'base', 0.85], [0.88, 'rich', 0.4], [1, 'rich', 0]],
   },
   snare: {
-    outer: [[0, 'light', 1], [0.2, 'base', 1], [0.55, 'base', 1], [0.78, 'rich', 1], [0.93, 'rich', 0.96], [1, 'rich', 0.9]],
-    inner: [[0, 'light', 1], [0.2, 'base', 1], [0.52, 'base', 1], [0.72, 'rich', 0.85], [0.88, 'rich', 0.4], [1, 'rich', 0]],
+    outer: [[0, 'base', 1], [0.2, 'base', 1], [0.55, 'base', 1], [0.78, 'rich', 1], [0.93, 'rich', 0.96], [1, 'rich', 0.9]],
+    inner: [[0, 'base', 1], [0.2, 'base', 1], [0.52, 'base', 1], [0.72, 'rich', 0.85], [0.88, 'rich', 0.4], [1, 'rich', 0]],
   },
   hihat: {
-    outer: [[0, 'light', 0.82], [0.45, 'light', 0.82], [0.72, 'base', 0.86], [0.86, 'base', 0.84], [0.95, 'rich', 0.8], [1, 'rich', 0.76]],
-    inner: [[0, 'light', 0.82], [0.42, 'light', 0.82], [0.66, 'base', 0.8], [0.8, 'base', 0.6], [0.92, 'rich', 0.25], [1, 'rich', 0]],
+    outer: [[0, 'base', 0.9], [0.45, 'base', 0.88], [0.72, 'base', 0.86], [0.86, 'base', 0.84], [0.95, 'rich', 0.8], [1, 'rich', 0.76]],
+    inner: [[0, 'base', 0.9], [0.42, 'base', 0.88], [0.66, 'base', 0.8], [0.8, 'base', 0.6], [0.92, 'rich', 0.25], [1, 'rich', 0]],
   },
+  // Centres are filled with the color itself (no near-white light tone), so no white spot shows in the middle.
   clap: {
-    outer: [[0, 'light', 1], [0.26, 'base', 1], [0.6, 'rich', 1], [0.8, 'rich', 1], [0.93, 'rich', 0.94], [1, 'rich', 0.88]],
-    inner: [[0, 'light', 1], [0.24, 'base', 1], [0.54, 'rich', 1], [0.72, 'rich', 0.8], [0.88, 'rich', 0.35], [1, 'rich', 0]],
+    outer: [[0, 'base', 1], [0.26, 'base', 1], [0.6, 'rich', 1], [0.8, 'rich', 1], [0.93, 'rich', 0.94], [1, 'rich', 0.88]],
+    inner: [[0, 'base', 1], [0.24, 'base', 1], [0.54, 'rich', 1], [0.72, 'rich', 0.8], [0.88, 'rich', 0.35], [1, 'rich', 0]],
   },
 };
 /** The outermost form keeps a clean silhouette; forms inside it thin out over their last quarter and melt into the color around them. */
