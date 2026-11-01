@@ -168,6 +168,16 @@ const DARK_FORM_STROKE = 2;
 const DARK_HIT = { share: 0.3, min: 20, stroke: 1.5 };
 
 /**
+ * Dark Mode: the least black space between the strokes of two neighbouring
+ * lines of a circle (drawing units), at rest and in motion. With the 2-unit
+ * form strokes this is 5.5 between centres, just under the least gap the
+ * forms keep at rest (6 × the artwork scale, 0.95–1), so rest sizes never move.
+ */
+const RING_CLEAR = 3.5;
+/** Next to a ring (whose neon bloom is wider), the clear space is wider too. */
+const RING_CLEAR_WIDE = 8;
+
+/**
  * Dark Mode size order: the four sizes from the rhythm (presets/sizing.ts),
  * handed out largest first as Kick, Hi-hat, Snare, Clap/Cymbal, so the
  * hierarchy always holds while each artwork keeps its own proportions.
@@ -298,24 +308,20 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
      * too, so the circle moves as one system). Outer rings expand further and
      * a little later, so each hit reads as a wave of light spreading outward.
      * Between hits they breathe faintly; at rest they sit exactly in place.
+     *
+     * Then every line of the circle (the four form outlines and these rings)
+     * is kept in its rest order with at least RING_CLEAR of black between neighbouring strokes: a
+     * line that would reach the next one pushes it outward instead, so rings
+     * never touch, cross or stack, even on the strongest hit.
      */
     const applyOutlines = (t: number | null) => {
       const list = outlinesRef.current;
-      if (list.length === 0) return;
+      if (!darkRef.current) return;
       const live = t !== null && !!animator;
       const outerR = Math.max(...CHANNELS.map((ch) => ringsRef.current[ch].r));
       const now = performance.now() / 1000;
-      list.forEach((o, i) => {
-        const el = ringEls.current[i];
-        if (!el) return;
-        const stroke = el.firstElementChild as SVGElement | null;
-        if (!live) {
-          el.removeAttribute('transform');
-          stroke?.setAttribute('stroke-opacity', String(o.opacity));
-          stroke?.setAttribute('stroke-width', String(o.width));
-          el.setAttribute('data-wave', '0');
-          return;
-        }
+      const want = list.map((o) => {
+        if (!live) return { r: o.r, wave: 0, energy: 0 };
         const out = Math.max(0, o.r / outerR - 0.85); // 0 near the forms, up to ~0.9 for the farthest ring
         const lag = OUTLINE_WAVE.lag * (o.r / outerR); // seconds: the wave reaches outer rings later
         let own = 0;
@@ -330,13 +336,44 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         }
         const wave = 0.65 * own + 0.35 * all;
         const breathe = o.grow * 0.35 * Math.sin((2 * Math.PI * now) / o.period + o.delay);
-        const scale = 1 + breathe + wave * (OUTLINE_WAVE.near + OUTLINE_WAVE.far * out);
-        const drift = 0.4 + wave;
-        el.setAttribute('transform', `translate(${(o.dx * drift).toFixed(3)} ${(o.dy * drift).toFixed(3)}) scale(${scale.toFixed(4)})`);
-        stroke?.setAttribute('stroke-opacity', Math.min(1, o.opacity * (1 + 0.8 * energy)).toFixed(3));
-        stroke?.setAttribute('stroke-width', (o.width * (1 + 0.7 * energy)).toFixed(3));
-        el.setAttribute('data-wave', wave.toFixed(4));
+        return { r: o.r * (1 + breathe + wave * (OUTLINE_WAVE.near + OUTLINE_WAVE.far * out)), wave, energy };
       });
+
+      // Every line of the circle in rest order, pushed apart where they would meet.
+      const lines = [
+        ...CHANNELS.map((ch) => {
+          const el = refs.current[ch];
+          return { rest: sp[ch].x, r: Number(el?.getAttribute('r') ?? sp[ch].x), w: Number(el?.getAttribute('stroke-width') ?? DARK_FORM_STROKE), form: ch as Channel | null, i: -1 };
+        }),
+        ...list.map((o, i) => ({ rest: o.r, r: want[i].r, w: live ? o.width * (1 + 0.7 * want[i].energy) : o.width, form: null as Channel | null, i })),
+      ].sort((a, b) => a.rest - b.rest);
+      // A ring is drawn scaled, so its stroke widens with it.
+      const drawnW = (line: (typeof lines)[number]) => (line.form ? line.w : (line.w * line.r) / list[line.i].r);
+      // Clear black space between neighbours, measured between the edges of their strokes.
+      for (let k = 1; k < lines.length; k++) {
+        const [a, b] = [lines[k - 1], lines[k]];
+        const least = a.r + drawnW(a) / 2 + (a.form && b.form ? RING_CLEAR : RING_CLEAR_WIDE);
+        // Solve r − (w·r/r₀)/2 ≥ least for a ring (its stroke grows with r); a form's stroke does not.
+        const need = b.form ? least + b.w / 2 : least / (1 - b.w / (2 * list[b.i].r));
+        b.r = Math.max(b.r, need);
+      }
+      for (const line of lines) {
+        if (line.form) {
+          const el = refs.current[line.form];
+          if (el && Math.abs(Number(el.getAttribute('r')) - line.r) > 1e-4) el.setAttribute('r', line.r.toFixed(4));
+          continue;
+        }
+        const o = list[line.i];
+        const el = ringEls.current[line.i];
+        if (!el) continue;
+        const stroke = el.firstElementChild as SVGElement | null;
+        const { wave, energy } = want[line.i];
+        if (!live && Math.abs(line.r - o.r) < 1e-4) el.removeAttribute('transform');
+        else el.setAttribute('transform', `scale(${(line.r / o.r).toFixed(5)})`);
+        stroke?.setAttribute('stroke-opacity', live ? Math.min(1, o.opacity * (1 + 0.8 * energy)).toFixed(3) : String(o.opacity));
+        stroke?.setAttribute('stroke-width', live ? (o.width * (1 + 0.7 * energy)).toFixed(3) : String(o.width));
+        el.setAttribute('data-wave', wave.toFixed(4));
+      }
     };
 
     const apply = (t: number | null) => {
@@ -551,12 +588,10 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
                 ringEls.current[i] = el;
               }}
             >
-              <ellipse
-                cx={o.cx}
-                cy={o.cy}
-                rx={o.rx}
-                ry={o.ry}
-                transform={`rotate(${o.rotate.toFixed(1)})`}
+              <circle
+                cx={0}
+                cy={0}
+                r={o.r}
                 fill="none"
                 stroke={gradientFor(colors[o.zone])[o.tone]}
                 strokeWidth={o.width}

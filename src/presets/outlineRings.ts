@@ -5,28 +5,19 @@ import type { Channel, Ring } from '../types';
 /**
  * Dark Mode outline rings: thin concentric outlines drawn over and around the
  * four color forms, as if the circle kept spreading outward in layers. Every
- * artwork gets its own number, spacing, size, tone and slight irregularity
- * from its seed, so no two look alike and no ring is a perfect copy of
- * another. Light Mode never draws them.
+ * artwork gets its own spacing, size and tone
+ * from its seed, so no two look alike. Light Mode never draws them.
  */
 export interface OutlineRing {
   zone: Channel;
   /** Radius in the artwork's radius-100 space. */
   r: number;
-  /** Slightly elliptical and a little off-centre, so the layers feel organic. */
-  rx: number;
-  ry: number;
-  cx: number;
-  cy: number;
-  rotate: number;
   /** Stroke width and opacity. */
   width: number;
   opacity: number;
   tone: keyof GradientFamily;
-  /** Motion while the artwork animates: faint breathing (scale, period, phase) and how far a hit drifts it. */
+  /** Motion while the artwork animates: faint breathing (scale, period, phase). Rings stay perfect, centred circles so they never cross. */
   grow: number;
-  dx: number;
-  dy: number;
   period: number;
   delay: number;
 }
@@ -58,21 +49,13 @@ export function buildOutlineRings(seed: number, forms: readonly Ring[]): Outline
 
   const push = (zone: Channel, r: number, opacity: number, outward: number) => {
     const rr = Math.min(MAX_RING_R, r);
-    const aspect = between(0.012, 0.035);
     out.push({
       zone,
       r: rr,
-      rx: rr * (1 + aspect),
-      ry: rr * (1 - aspect),
-      cx: between(-1, 1) * rr * 0.012,
-      cy: between(-1, 1) * rr * 0.012,
-      rotate: between(0, 180),
       width: between(0.8, 1.9),
       opacity,
       tone: TONES[Math.floor(rnd() * TONES.length)],
       grow: between(0.02, 0.05) + 0.07 * outward,
-      dx: between(-1.6, 1.6),
-      dy: between(-1.6, 1.6),
       period: between(6, 14),
       delay: -between(0, 14),
     });

@@ -19,9 +19,8 @@ describe('Dark Mode outline rings', () => {
       expect(rings.filter((o) => o.r < inner.r)).toHaveLength(1);
       expect(rings.filter((o) => o.r > outer.r).length).toBe(rings.length - 1);
       for (const o of rings) {
-        expect(o.r * (1 + o.grow) + Math.abs(o.dx) + 4).toBeLessThan(200);
+        expect(o.r * (1 + o.grow) + 4).toBeLessThan(200);
         expect(o.r).toBeLessThanOrEqual(MAX_RING_R);
-        expect(Math.abs(o.rx / o.ry - 1)).toBeLessThan(0.08);
       }
     }
   });
