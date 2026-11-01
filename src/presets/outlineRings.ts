@@ -38,15 +38,23 @@ export const MAX_RING_R = 158;
 const TONES: (keyof GradientFamily)[] = ['base', 'rich', 'light', 'base'];
 
 /**
- * The rings for one artwork. Each form gets 2–4 outlines hugging its own edge
- * (some just inside, some just outside); the outermost form also sends 2–4
- * wider rings outward at uneven gaps, fading as they go.
+ * The rings for one artwork, kept to the few that carry the motion (the four
+ * forms are outlines themselves, so with these the whole circle is about
+ * nine lines):
+ *
+ *   - 1 small ring near the centre, linking it to the innermost form;
+ *   - 1 echo just outside the outermost form, which a hit pushes out first;
+ *   - 1–2 wider wave rings beyond it, which a hit carries furthest.
+ *
+ * Every ring reacts to the sound (see applyOutlines in ArtworkGraphic).
  */
 export function buildOutlineRings(seed: number, forms: readonly Ring[]): OutlineRing[] {
   const rnd = mulberry32((seed ^ 0x5f3759df) >>> 0);
   const between = (a: number, b: number) => a + rnd() * (b - a);
   const out: OutlineRing[] = [];
-  const outermost = [...forms].sort((a, b) => b.r - a.r)[0];
+  const bySize = [...forms].sort((a, b) => b.r - a.r);
+  const outermost = bySize[0];
+  const innermost = bySize[bySize.length - 1];
 
   const push = (zone: Channel, r: number, opacity: number, outward: number) => {
     const rr = Math.min(MAX_RING_R, r);
@@ -70,27 +78,19 @@ export function buildOutlineRings(seed: number, forms: readonly Ring[]): Outline
     });
   };
 
-  for (const form of forms) {
-    const n = 2 + Math.floor(rnd() * 3);
-    for (let i = 0; i < n; i++) push(form.zone, form.r * between(0.7, 1.08), between(0.7, 0.95), 0);
-  }
+  // Centre: one ring halfway inside the smallest form, so the middle is not empty.
+  push(innermost.zone, innermost.r * between(0.4, 0.55), between(0.7, 0.9), 0);
 
-  // The forms have no filled surface in Dark Mode, so rings carry the inside too:
-  // the outermost form's interior, from near the centre outward, at uneven gaps.
-  const inner = 3 + Math.floor(outermost.r / 16) + Math.floor(rnd() * 2);
-  for (let i = 0; i < inner; i++) {
-    const at = 0.1 + (0.6 * (i + between(0.15, 0.85))) / inner;
-    const form = [...forms].sort((a, b) => a.r - b.r).find((f) => f.r >= outermost.r * at * 1.05) ?? outermost;
-    push(form.zone, outermost.r * at, between(0.6, 0.9), 0);
-  }
+  // Echo of the outermost form, just outside it.
+  push(outermost.zone, outermost.r * between(1.08, 1.14), between(0.75, 0.95), 0.3);
 
-  // Wider rings spreading outward from the outermost form, at uneven, growing gaps.
-  const n = 2 + Math.floor(rnd() * 3);
-  let r = outermost.r;
+  // Wave rings beyond it, at uneven gaps, fading as they go.
+  const n = 1 + Math.floor(rnd() * 2);
+  let r = outermost.r * 1.12;
   for (let i = 0; i < n; i++) {
-    r += outermost.r * between(0.1, 0.24) * (1 + i * 0.25);
+    r += outermost.r * between(0.16, 0.26);
     if (r > MAX_RING_R) break;
-    push(outermost.zone, r, 0.9 * (1 - i / (n + 3)) * between(0.8, 1), (i + 1) / n);
+    push(outermost.zone, r, 0.85 * (1 - i * 0.3) * between(0.85, 1), (i + 1) / n);
   }
   return out;
 }
