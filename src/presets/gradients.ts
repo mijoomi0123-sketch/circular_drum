@@ -39,9 +39,31 @@ export const GRADIENTS: Readonly<Record<ColorId, GradientFamily>> = {
 
 /**
  * How much more saturated the palette is in Dark Mode: ×1.4, then a further
- * +25% of that (×1.25), then +5% more (×1.05): ×1.8375 of the Light Mode base, clamped to 100%.
+ * +25% of that (×1.25), then +5% more (×1.05), then +50% more (×1.5):
+ * ×2.75625 of the Light Mode base, clamped to 100%.
  */
-export const DARK_SATURATION = 1.4 * 1.25 * 1.05;
+export const DARK_SATURATION = 1.4 * 1.25 * 1.05 * 1.5;
+
+/**
+ * Dark Mode hues for green and blue. Brightening clips both toward cyan
+ * (~180°), where they looked alike, so in Dark Mode each tone is turned to a
+ * fixed hue (keeping its saturation and value): green to a clear green,
+ * blue to a clear sky blue. Light Mode and the other colors are unchanged.
+ */
+export const DARK_HUE: Readonly<Partial<Record<ColorId, number>>> = { green: 150, blue: 212 };
+
+/** One color turned to hue `h` (degrees), keeping its HSV saturation and value. */
+export function withHue(hex: string, h: number): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const v = Math.max(r, g, b);
+  const c = v - Math.min(r, g, b);
+  const f = (k: number) => {
+    const t = (k + h / 60) % 6;
+    return Math.round(v - c * Math.max(0, Math.min(t, 4 - t, 1)));
+  };
+  return `#${[f(5), f(3), f(1)].map((x) => x.toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+}
 
 /**
  * One color with its HSV saturation multiplied by `factor` (clamped to 1),
@@ -73,13 +95,20 @@ export function brightenHex(hex: string, factor: number): string {
 }
 
 /**
- * Dark Mode families: every tone of each Light Mode family, ×1.8375 saturation,
- * then ×1.32 brighter. Always derived from GRADIENTS, never from itself.
+ * Dark Mode families: every tone of each Light Mode family, ×2.75625 saturation,
+ * then ×1.32 brighter (green and blue then turned to DARK_HUE). Always derived
+ * from GRADIENTS, never from itself.
  */
 export const GRADIENTS_DARK: Readonly<Record<ColorId, GradientFamily>> = Object.fromEntries(
   Object.entries(GRADIENTS).map(([id, g]) => [
     id,
-    Object.fromEntries(Object.entries(g).map(([tone, hex]) => [tone, brightenHex(saturateHex(hex, DARK_SATURATION), DARK_BRIGHTNESS)])) as unknown as GradientFamily,
+    Object.fromEntries(
+      Object.entries(g).map(([tone, hex]) => {
+        const lit = brightenHex(saturateHex(hex, DARK_SATURATION), DARK_BRIGHTNESS);
+        const h = DARK_HUE[id as ColorId];
+        return [tone, h === undefined ? lit : withHue(lit, h)];
+      }),
+    ) as unknown as GradientFamily,
   ]),
 ) as Record<ColorId, GradientFamily>;
 
@@ -91,7 +120,7 @@ export function setPaletteTheme(theme: PaletteTheme) {
   activeTheme = theme;
 }
 
-/** A color's family for the active theme (Light Mode: the exact palette; Dark Mode: ×1.8375 saturation, ×1.32 brightness). */
+/** A color's family for the active theme (Light Mode: the exact palette; Dark Mode: ×2.75625 saturation, ×1.32 brightness, DARK_HUE for green and blue). */
 export function gradientFor(color: ColorId, theme: PaletteTheme = activeTheme): GradientFamily {
   return (theme === 'dark' ? GRADIENTS_DARK : GRADIENTS)[color];
 }
