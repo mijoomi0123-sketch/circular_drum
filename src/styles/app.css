@@ -513,7 +513,8 @@ input:focus-visible {
   cursor: default;
 }
 
-/* Randomize Layout: a clear, filled pill with a shuffle icon, so it is easy to find. */
+/* Randomize Layout: the UI's own outline pill (no solid block in either theme), a little larger, with a
+   shuffle icon and a faint tint and glow of the ink color so it is easy to find; it lights up on hover. */
 .le-random {
   display: inline-flex;
   align-items: center;
@@ -521,14 +522,15 @@ input:focus-visible {
   height: 38px;
   padding: 0 18px 0 14px;
   border-radius: 19px;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--canvas);
+  border: 1px solid color-mix(in srgb, var(--ink) 55%, transparent);
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--ink);
   font: inherit;
   font-size: 13px;
   letter-spacing: 0.01em;
   cursor: pointer;
-  transition: transform 160ms var(--ease-soft), opacity 160ms;
+  transition: transform 160ms var(--ease-soft), opacity 160ms, background 160ms, border-color 160ms, box-shadow 160ms;
 }
 
 .le-random svg {
@@ -538,6 +540,13 @@ input:focus-visible {
 .le-random:hover:not(:disabled) svg,
 .le-random:focus-visible svg {
   transform: rotate(180deg);
+}
+
+.le-random:hover:not(:disabled),
+.le-random:focus-visible {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  box-shadow: 0 0 18px color-mix(in srgb, var(--ink) 16%, transparent);
 }
 
 .le-random:active:not(:disabled) {
@@ -553,6 +562,7 @@ input:focus-visible {
   opacity: 0.35;
   cursor: default;
 }
+
 
 
 
