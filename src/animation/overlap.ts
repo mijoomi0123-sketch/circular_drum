@@ -85,19 +85,54 @@ export function overlapState(
   return out;
 }
 
-/** Two colors mixed like overlapping inks: each channel multiplied (yellow × blue → green; a color with itself → deeper and more vivid). */
-export function inkMix(a: string, b: string): [number, number, number] {
-  const [x, y] = [rgbOf(a), rgbOf(b)];
-  return [0, 1, 2].map((i) => (x[i] * y[i]) / 255) as [number, number, number];
+const hsvOf = (hex: string): [number, number, number] => {
+  const [r, g, b] = rgbOf(hex).map((c) => c / 255);
+  const v = Math.max(r, g, b);
+  const d = v - Math.min(r, g, b);
+  const h = d === 0 ? 0 : v === r ? ((g - b) / d) % 6 : v === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [((h * 60) + 360) % 360, v ? d / v : 0, v];
+};
+const rgbOfHsv = (h: number, s: number, v: number): [number, number, number] => {
+  const f = (k: number) => {
+    const t = (k + h / 60) % 6;
+    return 255 * (v - v * s * Math.max(0, Math.min(t, 4 - t, 1)));
+  };
+  return [f(5), f(3), f(1)];
+};
+
+/** How much more saturated a mix of colored light is than the more saturated of its colors. */
+export const LIGHT_MIX_SAT = 1.5;
+
+/**
+ * Colors mixed like colored light, staying bright and clean: the hue is the
+ * weighted average of the hues (on the color wheel, so Yellow + Blue lands on
+ * green), the brightness is the brighter of the two, and the saturation is
+ * the stronger one lifted by LIGHT_MIX_SAT. A color with itself keeps its hue
+ * and becomes more vivid; nothing ever turns darker, gray or muddy.
+ */
+export function lightMix(colors: readonly { hex: string; w: number }[]): [number, number, number] {
+  let x = 0;
+  let y = 0;
+  let sat = 0;
+  let val = 0;
+  for (const { hex, w } of colors) {
+    const [h, s, v] = hsvOf(hex);
+    const k = w * Math.max(0.15, s); // gray-ish colors pull the hue less
+    x += Math.cos((h * Math.PI) / 180) * k;
+    y += Math.sin((h * Math.PI) / 180) * k;
+    sat = Math.max(sat, s);
+    val = Math.max(val, v);
+  }
+  const hue = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+  return rgbOfHsv(hue, Math.min(1, sat * LIGHT_MIX_SAT), val);
 }
 
 /**
  * Light Mode: where sounding forms overlap, the shared region (the smaller
- * form, drawn on top) takes on the genuine mix of the colors rather than a
- * translucent layer: its own base tone multiplied with each larger sounding
- * form's base (weighted by how loud both are), shown strongly enough to read
- * as one combined color. Same-color overlaps multiply a color with itself, so
- * they become denser and more saturated; Blue + Yellow becomes green.
+ * form, drawn on top) takes on the mix of the colors as colored light (see
+ * lightMix), weighted by how loud each is, shown strongly enough to read as
+ * one combined color: Yellow + Yellow becomes a brighter, more vivid yellow;
+ * Blue + Yellow a clear, bright green.
  */
 function mixedWash(
   x: Channel,
@@ -108,20 +143,21 @@ function mixedWash(
   diff: number,
 ): Overlap {
   const own = gradientFor(colors[x]).base;
-  const rgb = [0, 0, 0];
+  const parts: { hex: string; w: number }[] = [];
   let total = 0;
   for (const y of CHANNELS) {
     if (y === x || p[y] <= 0.001 || sizes[y].x <= sizes[x].x) continue;
     const w = p[x] * p[y];
-    const m = inkMix(own, gradientFor(colors[y]).base);
-    for (let i = 0; i < 3; i++) rgb[i] += m[i] * w;
+    parts.push({ hex: gradientFor(colors[y]).base, w });
     total += w;
   }
+  // The form's own color counts as much as all the colors beneath it together.
+  const rgb = lightMix([{ hex: own, w: total }, ...parts]);
   const strength = MIX_STRENGTH * (1 - Math.exp(-2.4 * total));
   return {
     intensity: 1.5 * (1 - Math.exp(-0.6 * same)),
     mix: 0.42 * (1 - Math.exp(-1.2 * diff)),
-    tintColor: `#${rgb.map((c) => Math.round(c / total).toString(16).padStart(2, '0')).join('')}`,
+    tintColor: `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`,
     tintOpacity: strength,
   };
 }
