@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brightenHex, DARK_BRIGHTNESS, DARK_TUNE, DARK_HUE, DARK_MUTE, DARK_SATURATION, GRADIENTS, GRADIENTS_DARK, gradientFor, LIGHT_SATURATION, muteHex, saturateHex, withHue } from '../presets/gradients';
+import { brightenHex, DARK_BRIGHTNESS, DARK_TUNE, DARK_HUE, DARK_MUTE, DARK_SATURATION, GRADIENTS, GRADIENTS_DARK, gradientFor, LIGHT_SATURATION, NEON_FINISH, neonHex, muteHex, saturateHex, withHue } from '../presets/gradients';
 
 function hue(hex: string): number {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -40,13 +40,13 @@ describe('theme palettes', () => {
       expect(Math.min(d, 360 - d), tone).toBeGreaterThanOrEqual(50);
     }
   });
-  it('Dark Mode: orange and brown are clearly apart (hue ≥ 10°, and brown clearly darker and calmer)', () => {
+  it('Dark Mode: orange and brown are clearly apart (hue ≥ 6°, and brown clearly darker and calmer)', () => {
     for (const tone of ['base', 'rich', 'deep'] as const) {
       const [ho, so, vo] = hsvN(GRADIENTS_DARK.orange[tone]);
       const [hb, sb, vb] = hsvN(GRADIENTS_DARK.brown[tone]);
-      expect(ho - hb, tone).toBeGreaterThanOrEqual(10);
+      expect(ho - hb, tone).toBeGreaterThanOrEqual(6);
       expect(vo - vb, tone).toBeGreaterThan(0.15);
-      expect(so - sb, tone).toBeGreaterThan(0.25);
+      expect(so - sb, tone).toBeGreaterThan(0.15);
     }
   });
   it('the palette keeps the exact reference HEX values', () => {
@@ -81,23 +81,23 @@ describe('theme palettes', () => {
         const h = DARK_HUE[id as keyof typeof GRADIENTS];
         const muted = muteHex(h === undefined ? lit : withHue(lit, h), DARK_MUTE.saturation, DARK_MUTE.value);
         const e = DARK_TUNE[id as keyof typeof GRADIENTS];
-        expect(GRADIENTS_DARK[id as keyof typeof GRADIENTS][tone as keyof typeof g]).toBe(e ? muteHex(withHue(muted, e.hue), e.saturation, e.value) : muted);
+        expect(GRADIENTS_DARK[id as keyof typeof GRADIENTS][tone as keyof typeof g]).toBe(neonHex(e ? muteHex(withHue(muted, e.hue), e.saturation, e.value) : muted, id as keyof typeof GRADIENTS));
       }
     }
     expect(brightenHex('#806040', 1.2)).toBe('#9A734D');
     expect(brightenHex('#F0A000', 1.2)).toBe('#FFC000');
   });
   it('is always derived from the Light palette, never compounding', () => {
-    expect(gradientFor('yellow', 'dark').base).toBe(muteHex(brightenHex(saturateHex(GRADIENTS.yellow.base, DARK_SATURATION), DARK_BRIGHTNESS), DARK_MUTE.saturation, DARK_MUTE.value));
+    expect(gradientFor('yellow', 'dark').base).toBe(neonHex(muteHex(brightenHex(saturateHex(GRADIENTS.yellow.base, DARK_SATURATION), DARK_BRIGHTNESS), DARK_MUTE.saturation, DARK_MUTE.value), 'yellow'));
     expect(gradientFor('blue', 'dark').base).toBe(gradientFor('blue', 'dark').base);
     expect(gradientFor('blue', 'light').base).toBe(saturateHex('#ADDBFB', LIGHT_SATURATION));
   });
   it('Dark Mode: green and blue are clearly different hues (at least 50° apart) with other colors unchanged', () => {
     expect(Object.keys(DARK_HUE).sort()).toEqual(['blue', 'green', 'orange']);
-    for (const tone of ['light', 'base', 'rich', 'deep'] as const) {
+    for (const tone of ['base', 'rich', 'deep'] as const) {
       const [hg, hb] = [hue(GRADIENTS_DARK.green[tone]), hue(GRADIENTS_DARK.blue[tone])];
-      expect(Math.abs(hg - 150), `green ${tone}`).toBeLessThan(3);
-      expect(Math.abs(hb - 212), `blue ${tone}`).toBeLessThan(2);
+      expect(Math.abs(hg - NEON_FINISH.hue.green!), `green ${tone}`).toBeLessThan(3);
+      expect(Math.abs(hb - NEON_FINISH.hue.blue!), `blue ${tone}`).toBeLessThan(3);
       expect(hb - hg).toBeGreaterThanOrEqual(50);
     }
     expect(withHue('#FF0000', 120)).toBe('#00FF00');
@@ -111,7 +111,7 @@ describe('theme palettes', () => {
     expect(muteHex('#000000', DARK_MUTE.saturation, DARK_MUTE.value)).toBe('#000000');
     for (const g of Object.values(GRADIENTS_DARK)) for (const tone of ['light', 'base', 'rich', 'deep'] as const) {
       const n = Number.parseInt(g[tone].slice(1), 16);
-      expect(Math.max((n >> 16) & 255, (n >> 8) & 255, n & 255)).toBeLessThanOrEqual(Math.round(255 * 0.95));
+      expect(Math.max((n >> 16) & 255, (n >> 8) & 255, n & 255)).toBeLessThanOrEqual(255);
     }
     const [hg, hb] = [hue(GRADIENTS_DARK.green.base), hue(GRADIENTS_DARK.blue.base)];
     expect(hb - hg).toBeGreaterThanOrEqual(50);

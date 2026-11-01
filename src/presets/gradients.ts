@@ -136,6 +136,42 @@ export function brightenHex(hex: string, factor: number): string {
 }
 
 /**
+ * Dark Mode neon finish, the last step: plain, fully saturated hues read like
+ * traditional paint or crayon colors, so every tone is turned into luminous,
+ * contemporary neon: saturation capped at NEON_FINISH.saturation (a touch of
+ * light in every color, like a lit tube), full brightness (value ×lift), and a
+ * few hues moved to their electric versions (tangerine, electric lime-yellow,
+ * mint, azure, hot pink, ultraviolet). Brown stays darker and calmer so it
+ * reads apart from the orange.
+ */
+export const NEON_FINISH = {
+  saturation: 0.74,
+  brownSaturation: 0.52,
+  lift: 1.12,
+  hue: { orange: 25, yellow: 66, green: 156, blue: 208, pink: 326, purple: 272 } as Readonly<Partial<Record<ColorId, number>>>,
+} as const;
+
+/** One Dark Mode tone given the neon finish (see NEON_FINISH). */
+export function neonHex(hex: string, id: ColorId): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const v = Math.max(r, g, b);
+  if (v === 0) return hex;
+  const s = (v - Math.min(r, g, b)) / v;
+  const h = NEON_FINISH.hue[id];
+  const v2 = Math.min(255, v * (id === 'brown' ? 1 : NEON_FINISH.lift));
+  // Brown stays an earthy copper: calmer than every neon (and darker, above), so it never reads as orange.
+  const s2 = Math.min(s, id === 'brown' ? NEON_FINISH.brownSaturation : NEON_FINISH.saturation);
+  const base = h === undefined ? hex : withHue(hex, h);
+  // Rebuild from the (possibly turned) hue with the new saturation and value.
+  const m = Number.parseInt(base.slice(1), 16);
+  const [R, G, B] = [(m >> 16) & 255, (m >> 8) & 255, m & 255];
+  const c = v - Math.min(r, g, b);
+  const k = (x: number) => (c === 0 ? v2 : v2 - ((v - x) / c) * s2 * v2);
+  return `#${[R, G, B].map((x) => Math.max(0, Math.min(255, Math.round(k(x)))).toString(16).padStart(2, '0')).join('')}`.toUpperCase();
+}
+
+/**
  * Dark Mode families: every tone of each Light Mode family, ×2.2325625 saturation,
  * then ×1.452 brighter (green and blue then turned to DARK_HUE), then
  * deepened and muted by DARK_MUTE. Always derived
@@ -150,7 +186,7 @@ export const GRADIENTS_DARK: Readonly<Record<ColorId, GradientFamily>> = Object.
         const h = DARK_HUE[id as ColorId];
         const muted = muteHex(h === undefined ? lit : withHue(lit, h), DARK_MUTE.saturation, DARK_MUTE.value);
         const earth = DARK_TUNE[id as ColorId];
-        return [tone, earth ? muteHex(withHue(muted, earth.hue), earth.saturation, earth.value) : muted];
+        return [tone, neonHex(earth ? muteHex(withHue(muted, earth.hue), earth.saturation, earth.value) : muted, id as ColorId)];
       }),
     ) as unknown as GradientFamily,
   ]),
