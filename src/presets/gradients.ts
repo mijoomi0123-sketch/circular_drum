@@ -51,7 +51,16 @@ export const DARK_SATURATION = 1.4 * 1.25 * 1.05 * 1.5 * 0.9 * 0.9;
  * fixed hue (keeping its saturation and value): green to a clear green,
  * blue to a clear sky blue. Light Mode and the other colors are unchanged.
  */
-export const DARK_HUE: Readonly<Partial<Record<ColorId, number>>> = { green: 150, blue: 212 };
+export const DARK_HUE: Readonly<Partial<Record<ColorId, number>>> = { green: 150, blue: 212, orange: 30 };
+
+/**
+ * Dark Mode brown: saturating and brightening turned it into a second orange,
+ * so it is pulled back to an earthy, darker copper brown (hue, then saturation
+ * and value scaled) that reads clearly apart from the bright orange.
+ */
+export const DARK_EARTH: Readonly<Partial<Record<ColorId, { hue: number; saturation: number; value: number }>>> = {
+  brown: { hue: 18, saturation: 0.72, value: 0.76 },
+};
 
 /**
  * Dark Mode depth: after saturation, brightness and hue, every tone is made
@@ -133,7 +142,9 @@ export const GRADIENTS_DARK: Readonly<Record<ColorId, GradientFamily>> = Object.
       Object.entries(g).map(([tone, hex]) => {
         const lit = brightenHex(saturateHex(hex, DARK_SATURATION), DARK_BRIGHTNESS);
         const h = DARK_HUE[id as ColorId];
-        return [tone, muteHex(h === undefined ? lit : withHue(lit, h), DARK_MUTE.saturation, DARK_MUTE.value)];
+        const muted = muteHex(h === undefined ? lit : withHue(lit, h), DARK_MUTE.saturation, DARK_MUTE.value);
+        const earth = DARK_EARTH[id as ColorId];
+        return [tone, earth ? muteHex(withHue(muted, earth.hue), earth.saturation, earth.value) : muted];
       }),
     ) as unknown as GradientFamily,
   ]),
