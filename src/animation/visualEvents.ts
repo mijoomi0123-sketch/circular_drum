@@ -30,7 +30,7 @@ export const MOTION: Readonly<Record<Channel, MotionCharacter>> = {
   snare: { growth: 0.11, attack: 0.022, decay: 0.085, spring: 0, halo: 0.6, bloom: 0.3, fade: 0.05 },
   // Light and airy but lively: a quick, clearly visible flick outward while the membrane shimmers brighter.
   // (growth, halo and bloom only drive Light Mode; Dark Mode sizes its hits with DARK_HIT.)
-  hihat: { growth: 0.075, attack: 0.012, decay: 0.05, spring: 0, halo: 0.5, bloom: 0.2, fade: 0.35 },
+  hihat: { growth: 0.26, attack: 0.015, decay: 0.1, spring: 0.06, halo: 0.6, bloom: 0.24, fade: 0.35 },
   // Broad and brief: a wide soft expansion with a large glow that settles quickly.
   clap: { growth: 0.24, attack: 0.035, decay: 0.13, spring: 0, halo: 0.7, bloom: 0.14, fade: 0.05 },
 };

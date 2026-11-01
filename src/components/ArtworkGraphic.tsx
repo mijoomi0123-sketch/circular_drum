@@ -5,7 +5,7 @@ import { MOTION } from '../animation/visualEvents';
 import { CHANNELS } from '../audio/channels';
 import { transport } from '../audio/transport';
 import { buildRings } from '../presets/designs';
-import { buildOutlineRings, PAIR_CLEAR } from '../presets/outlineRings';
+import { buildOutlineRings, DARK_FORM_STROKE, darkSizes, PAIR_CLEAR } from '../presets/outlineRings';
 import { overlapState } from '../animation/overlap';
 import { darkContour, darkLift, gradientFor, GRADIENTS, type ColorStop, type GradientFamily } from '../presets/gradients';
 import { useSettings } from '../storage/settingsStore';
@@ -164,7 +164,6 @@ const OUTLINE_WAVE = { near: 0.14, far: 0.75, lag: 0.07 };
 const NEON_GLOW = { near: 1.1, mid: 2.6, midAlpha: 1.5, wide: 9, wideAlpha: 1.05, far: 26, farAlpha: 0.8, boost: { mid: 0.5, wide: 0.7, far: 1 } };
 
 /** Dark Mode forms are drawn as outlines this wide (drawing units) instead of filled surfaces. */
-const DARK_FORM_STROKE = 2;
 
 /**
  * Dark Mode playing feedback: at a full hit a form grows by 30% of its radius
@@ -235,11 +234,12 @@ function transformOf(ring: Ring): string {
  */
 export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle, paused, className, label }: Props) {
   const { theme } = useSettings(); // re-render with the theme's palette (Dark Mode: more saturated, with a soft contour)
-  const sizes = circleSizes(patterns, steps); // the same in both themes
+  const dark = theme === 'dark';
+  // Dark Mode spaces the four instruments evenly inward from the Kick (see darkSizes).
+  const sizes = dark ? darkSizes(circleSizes(patterns, steps)) : circleSizes(patterns, steps);
   const sizeKey = CHANNELS.map((ch) => sizes[ch].toFixed(4)).join();
   const rings = useMemo(() => buildRings(design, sizes), [design.seed, sizeKey]);
   const byZone = useMemo(() => Object.fromEntries(rings.map((r) => [r.zone, r])) as Record<Channel, Ring>, [rings]);
-  const dark = theme === 'dark';
   const outlines = useMemo(() => (dark ? buildOutlineRings(design.seed, rings) : []), [dark, design.seed, rings]);
   const outlinesRef = useRef(outlines);
   outlinesRef.current = outlines;
