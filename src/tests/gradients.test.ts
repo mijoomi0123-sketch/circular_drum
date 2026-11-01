@@ -104,14 +104,14 @@ describe('theme palettes', () => {
     expect(withHue('#80FFC0', 240)).toBe('#8080FF');
     expect(GRADIENTS.green.base).toBe('#ADF0E4');
   });
-  it('Dark Mode tones are deeper and muted (value ×0.8, saturation ×1.2006, same hue)', () => {
-    expect(DARK_MUTE).toEqual({ saturation: 0.85 * 1.1 * 1.07 * 1.2, value: 0.8 });
-    expect(muteHex('#FF0000', DARK_MUTE.saturation, DARK_MUTE.value)).toBe('#CC0000');
-    expect(muteHex('#FFFFFF', DARK_MUTE.saturation, DARK_MUTE.value)).toBe('#CCCCCC');
+  it('Dark Mode tones are deeper and muted (value ×0.95, saturation ×1.2006, same hue)', () => {
+    expect(DARK_MUTE).toEqual({ saturation: 0.85 * 1.1 * 1.07 * 1.2, value: 0.95 });
+    expect(muteHex('#FF0000', DARK_MUTE.saturation, DARK_MUTE.value)).toBe('#F20000');
+    expect(muteHex('#FFFFFF', DARK_MUTE.saturation, DARK_MUTE.value)).toBe('#F2F2F2');
     expect(muteHex('#000000', DARK_MUTE.saturation, DARK_MUTE.value)).toBe('#000000');
     for (const g of Object.values(GRADIENTS_DARK)) for (const tone of ['light', 'base', 'rich', 'deep'] as const) {
       const n = Number.parseInt(g[tone].slice(1), 16);
-      expect(Math.max((n >> 16) & 255, (n >> 8) & 255, n & 255)).toBeLessThanOrEqual(204);
+      expect(Math.max((n >> 16) & 255, (n >> 8) & 255, n & 255)).toBeLessThanOrEqual(Math.round(255 * 0.95));
     }
     const [hg, hb] = [hue(GRADIENTS_DARK.green.base), hue(GRADIENTS_DARK.blue.base)];
     expect(hb - hg).toBeGreaterThanOrEqual(50);

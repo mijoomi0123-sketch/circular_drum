@@ -161,9 +161,9 @@ const OUTLINE_WAVE = { near: 0.14, far: 0.75, lag: 0.07 };
  * into the black without filling the inside. While the circle sounds, the
  * glows brighten with the hits (`boost`) and settle back as the sound fades.
  */
-/** Neon core: each line's own color mixed 30% toward white. */
-const NEON_CORE = '0.7 0 0 0 0.3  0 0.7 0 0 0.3  0 0 0.7 0 0.3  0 0 0 1 0';
-const NEON_GLOW = { near: 1.3, mid: 3.2, midAlpha: 2.2, wide: 12, wideAlpha: 1.7, far: 36, farAlpha: 1.3, innerWideAlpha: 0.9, boost: { mid: 0.5, wide: 0.8, far: 1.1 } };
+/** Neon core: each line's own color mixed 18% toward white (enough to read as a lit tube, little enough to keep the color vivid). */
+const NEON_CORE = '0.82 0 0 0 0.18  0 0.82 0 0 0.18  0 0 0.82 0 0.18  0 0 0 1 0';
+const NEON_GLOW = { near: 1.4, mid: 3.4, midAlpha: 2.8, wide: 13, wideAlpha: 2.1, far: 38, farAlpha: 1.6, innerWideAlpha: 1.25, boost: { mid: 0.5, wide: 0.8, far: 1.1 } };
 
 /** Dark Mode forms are drawn as outlines this wide (drawing units) instead of filled surfaces. */
 
