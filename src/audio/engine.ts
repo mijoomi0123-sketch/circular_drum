@@ -204,15 +204,13 @@ class AudioEngine {
 
   /**
    * Load the four samples picked by per-instrument colors, for the active
-   * theme. The other theme's four follow quietly afterwards, so switching the
-   * theme while playing needs no wait.
+   * sound set (the same in both themes).
    */
   async loadChannels(colors: Record<Channel, ColorId>): Promise<void> {
     const pairs = CHANNELS.map((ch): [Channel, ColorId] => [ch, colors[ch]]);
     for (const [ch, c] of pairs) this.slots.set(`${ch}|${c}`, [ch, c]);
     const theme = activeSoundTheme();
     await this.loadSlots(pairs, theme);
-    void this.loadSlots(pairs, theme === 'dark' ? 'light' : 'dark');
   }
 
   /**

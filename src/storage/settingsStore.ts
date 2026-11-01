@@ -49,7 +49,9 @@ const listeners = new Set<() => void>();
 
 function applyTheme(theme: Theme) {
   setPaletteTheme(theme); // circle colors follow the theme (see presets/gradients.ts)
-  setSoundTheme(theme); // and so do the samples: Light Mode's own set, Dark Mode the originals (see audio/sampleMap.ts)
+  // Both themes play the same sounds: the original (Dark Mode) samples. The Light Mode set stays in
+  // public/audio/light/ but is no longer used (see audio/sampleMap.ts).
+  setSoundTheme('dark');
   document.documentElement.dataset.theme = theme;
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#000000' : '#fafafa');
 }

@@ -110,7 +110,7 @@ for (const p of SAMPLE_PROBLEMS) console.warn(`[Circular Drum] sample "${p.file}
  * Set by the settings store whenever the theme changes, so every sound follows it.
  */
 export type SoundTheme = 'light' | 'dark';
-let soundTheme: SoundTheme = 'light';
+let soundTheme: SoundTheme = 'dark'; // the app always plays the original set now, in both themes
 export function setSoundTheme(theme: SoundTheme) {
   soundTheme = theme;
 }
