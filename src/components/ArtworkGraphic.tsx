@@ -377,7 +377,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
     };
 
     const apply = (t: number | null) => {
-      const overlap = overlapState(t === null || !animator ? null : (ch) => animator.presence(t, ch), sp, colorsRef.current);
+      const overlap = overlapState(t === null || !animator ? null : (ch) => animator.presence(t, ch), sp, colorsRef.current, !darkRef.current);
       for (const ch of CHANNELS) {
         const el = refs.current[ch];
         if (!el) continue;
