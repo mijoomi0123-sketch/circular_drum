@@ -23,7 +23,7 @@ export interface OutlineRing {
   width: number;
   opacity: number;
   tone: keyof GradientFamily;
-  /** Calm, independent motion while the artwork animates: scale, drift, period and phase. */
+  /** Motion while the artwork animates: faint breathing (scale, period, phase) and how far a hit drifts it. */
   grow: number;
   dx: number;
   dy: number;
@@ -34,7 +34,8 @@ export interface OutlineRing {
 /** No ring reaches past this radius, so the drawing (±200) never cuts one, even fully spread. */
 export const MAX_RING_R = 158;
 
-const TONES: (keyof GradientFamily)[] = ['light', 'base', 'rich', 'deep'];
+/** The family's bright tones (no deep), mostly its own color, so the outlines read as colored light on black. */
+const TONES: (keyof GradientFamily)[] = ['base', 'rich', 'light', 'base'];
 
 /**
  * The rings for one artwork. Each form gets 2–4 outlines hugging its own edge
@@ -58,7 +59,7 @@ export function buildOutlineRings(seed: number, forms: readonly Ring[]): Outline
       cx: between(-1, 1) * rr * 0.012,
       cy: between(-1, 1) * rr * 0.012,
       rotate: between(0, 180),
-      width: between(0.7, 1.8),
+      width: between(0.8, 1.9),
       opacity,
       tone: TONES[Math.floor(rnd() * TONES.length)],
       grow: between(0.02, 0.05) + 0.07 * outward,
@@ -71,7 +72,7 @@ export function buildOutlineRings(seed: number, forms: readonly Ring[]): Outline
 
   for (const form of forms) {
     const n = 2 + Math.floor(rnd() * 3);
-    for (let i = 0; i < n; i++) push(form.zone, form.r * between(0.7, 1.08), between(0.5, 0.85), 0);
+    for (let i = 0; i < n; i++) push(form.zone, form.r * between(0.7, 1.08), between(0.7, 0.95), 0);
   }
 
   // Wider rings spreading outward from the outermost form, at uneven, growing gaps.
@@ -80,7 +81,7 @@ export function buildOutlineRings(seed: number, forms: readonly Ring[]): Outline
   for (let i = 0; i < n; i++) {
     r += outermost.r * between(0.1, 0.24) * (1 + i * 0.25);
     if (r > MAX_RING_R) break;
-    push(outermost.zone, r, 0.8 * (1 - i / (n + 2)) * between(0.75, 1), (i + 1) / n);
+    push(outermost.zone, r, 0.9 * (1 - i / (n + 3)) * between(0.8, 1), (i + 1) / n);
   }
   return out;
 }

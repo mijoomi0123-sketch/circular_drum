@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { audibleTime } from '../animation/clock';
 import type { DropletAnimator } from '../animation/droplet';
 import { MOTION } from '../animation/visualEvents';
@@ -147,6 +147,16 @@ const FILTER_REGION = regions(1);
 /** Dark Mode's outermost form: wide enough for its neon halo. */
 const FILTER_REGION_NEON = regions(NEON.spread);
 
+/**
+ * Dark Mode outline rings: how far a hit expands them (×swell; rings near the
+ * forms by `near`, the farthest by up to `near + far·0.9`) and how long the
+ * wave takes to reach the outermost ring (seconds). Wide rings may spread
+ * over neighbouring circles.
+ */
+const OUTLINE_WAVE = { near: 0.14, far: 0.75, lag: 0.07 };
+/** Their neon: a tight bloom, and a wide one strengthened by `farAlpha` (blur radii in drawing units). */
+const OUTLINE_GLOW = { near: 1.1, far: 4.5, farAlpha: 2.2 };
+
 /** Spring rate of size changes (rad/s); critically damped, so no bounce. */
 const SIZE_SPRING = 9;
 /** Swollen forms ease into this band instead of leaving the frame. */
@@ -197,6 +207,9 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
   const byZone = useMemo(() => Object.fromEntries(rings.map((r) => [r.zone, r])) as Record<Channel, Ring>, [rings]);
   const dark = theme === 'dark';
   const outlines = useMemo(() => (dark ? buildOutlineRings(design.seed, rings) : []), [dark, design.seed, rings]);
+  const outlinesRef = useRef(outlines);
+  outlinesRef.current = outlines;
+  const ringEls = useRef<(SVGGElement | null)[]>([]);
 
   const springs = useRef<Record<Channel, Spring> | null>(null);
   if (!springs.current) springs.current = Object.fromEntries(rings.map((r) => [r.zone, { x: r.r, v: 0 }])) as Record<Channel, Spring>;
@@ -258,6 +271,53 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
       return moving;
     };
 
+    /**
+     * Dark Mode outline rings follow the sound: every ring, inner to outer,
+     * swells with the circle's hits (its own instrument most, the others
+     * too, so the circle moves as one system). Outer rings expand further and
+     * a little later, so each hit reads as a wave of light spreading outward.
+     * Between hits they breathe faintly; at rest they sit exactly in place.
+     */
+    const applyOutlines = (t: number | null) => {
+      const list = outlinesRef.current;
+      if (list.length === 0) return;
+      const live = t !== null && !!animator;
+      const outerR = Math.max(...CHANNELS.map((ch) => ringsRef.current[ch].r));
+      const now = performance.now() / 1000;
+      list.forEach((o, i) => {
+        const el = ringEls.current[i];
+        if (!el) return;
+        const stroke = el.firstElementChild as SVGElement | null;
+        if (!live) {
+          el.removeAttribute('transform');
+          stroke?.setAttribute('stroke-opacity', String(o.opacity));
+          stroke?.setAttribute('stroke-width', String(o.width));
+          el.setAttribute('data-wave', '0');
+          return;
+        }
+        const out = Math.max(0, o.r / outerR - 0.85); // 0 near the forms, up to ~0.9 for the farthest ring
+        const lag = OUTLINE_WAVE.lag * (o.r / outerR); // seconds: the wave reaches outer rings later
+        let own = 0;
+        let all = 0;
+        let energy = 0;
+        for (const ch of CHANNELS) {
+          const s = animator!.sample(t! - lag, ch);
+          const v = Math.max(0, s.swell);
+          if (ch === o.zone) own = v;
+          all = Math.max(all, v);
+          energy = Math.max(energy, s.energy);
+        }
+        const wave = 0.65 * own + 0.35 * all;
+        const breathe = o.grow * 0.35 * Math.sin((2 * Math.PI * now) / o.period + o.delay);
+        const scale = 1 + breathe + wave * (OUTLINE_WAVE.near + OUTLINE_WAVE.far * out);
+        const drift = 0.4 + wave;
+        el.setAttribute('transform', `translate(${(o.dx * drift).toFixed(3)} ${(o.dy * drift).toFixed(3)}) scale(${scale.toFixed(4)})`);
+        stroke?.setAttribute('stroke-opacity', Math.min(1, o.opacity * (1 + 0.8 * energy)).toFixed(3));
+        stroke?.setAttribute('stroke-width', (o.width * (1 + 0.7 * energy)).toFixed(3));
+        el.setAttribute('data-wave', wave.toFixed(4));
+      });
+    };
+
     const apply = (t: number | null) => {
       const overlap = overlapState(t === null || !animator ? null : (ch) => animator.presence(t, ch), sp, colorsRef.current);
       for (const ch of CHANNELS) {
@@ -305,6 +365,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         el.setAttribute('data-intensity', quiet ? '0' : o.intensity.toFixed(4));
         el.setAttribute('data-mix', quiet ? '0' : o.mix.toFixed(4));
       }
+      applyOutlines(t);
       const next = drawOrder(Object.fromEntries(CHANNELS.map((ch) => [ch, sp[ch].x])) as Record<Channel, number>);
       if (next.join() !== orderRef.current.join()) setOrder(next);
     };
@@ -400,12 +461,17 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
           );
         })}
         {dark && (
-          // A soft neon bloom around the outline rings, in their own colors.
-          <filter id={`rings-${uid}`} x="-10%" y="-10%" width="120%" height="120%" colorInterpolationFilters="sRGB">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="1.6" result="bloom" />
+          // Neon around the outline rings: a tight bright bloom and a wide soft one in their own colors, with the crisp stroke on top.
+          <filter id={`rings-${uid}`} x="-25%" y="-25%" width="150%" height="150%" colorInterpolationFilters="sRGB">
+            <feGaussianBlur in="SourceGraphic" stdDeviation={OUTLINE_GLOW.near} result="near" />
+            <feGaussianBlur in="SourceGraphic" stdDeviation={OUTLINE_GLOW.far} result="farBlur" />
+            <feComponentTransfer in="farBlur" result="far">
+              <feFuncA type="linear" slope={OUTLINE_GLOW.farAlpha} />
+            </feComponentTransfer>
             <feMerge>
-              <feMergeNode in="bloom" />
-              <feMergeNode in="bloom" />
+              <feMergeNode in="far" />
+              <feMergeNode in="near" />
+              <feMergeNode in="near" />
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
@@ -442,9 +508,15 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         // Dark Mode only: thin concentric outlines over and around the forms (presets/outlineRings.ts).
         <g className="outline-rings" filter={`url(#rings-${uid})`}>
           {outlines.map((o, i) => (
-            <g key={i} className="outline-ring" style={{ '--grow': o.grow, '--dx': `${o.dx}px`, '--dy': `${o.dy}px`, animationDuration: `${o.period.toFixed(2)}s`, animationDelay: `${o.delay.toFixed(2)}s` } as CSSProperties}>
+            <g
+              key={i}
+              className="outline-ring"
+              data-zone={o.zone}
+              ref={(el) => {
+                ringEls.current[i] = el;
+              }}
+            >
               <ellipse
-                data-zone={o.zone}
                 cx={o.cx}
                 cy={o.cy}
                 rx={o.rx}
