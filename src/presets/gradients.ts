@@ -59,7 +59,7 @@ export const DARK_HUE: Readonly<Partial<Record<ColorId, number>>> = { green: 150
  * saturation ×0.85, same hue. The neon glow and its light-tone lift still come
  * from these tones, so the forms keep glowing, just in darker, muted colors.
  */
-export const DARK_MUTE = { saturation: 0.85 * 1.1, value: 0.8 } as const;
+export const DARK_MUTE = { saturation: 0.85 * 1.1 * 1.07, value: 0.8 } as const;
 
 /** One color with its HSV saturation and value each multiplied (clamped to 1), same hue. */
 export function muteHex(hex: string, saturation: number, value: number): string {
