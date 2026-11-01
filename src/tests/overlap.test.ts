@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DropletAnimator } from '../animation/droplet';
 import { overlapState } from '../animation/overlap';
+import { gradientFor } from '../presets/gradients';
 import type { Channel, ChannelColors, Instrument, ScheduledEvent } from '../types';
 
 const sizes = { kick: { x: 70 }, snare: { x: 60 }, hihat: { x: 50 }, clap: { x: 40 } };
@@ -34,7 +35,7 @@ describe('overlap color response', () => {
     const d = overlapState(on('kick', 'snare'), sizes, colors);
     expect(d.snare.mix).toBeGreaterThan(0);
     expect(d.snare.intensity).toBe(0);
-    expect(d.snare.tintColor).toBe('#fef49d'); // yellow's base tone blends into the blue
+    expect(d.snare.tintColor).toBe(gradientFor('yellow').base.toLowerCase()); // yellow's base tone blends into the blue
     const both = overlapState(on('kick', 'snare', 'clap'), sizes, colors);
     expect(both.clap.intensity).toBeGreaterThan(0); // yellow kick over yellow clap
     expect(both.clap.mix).toBeGreaterThan(0); // blue snare over yellow clap

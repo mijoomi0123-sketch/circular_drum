@@ -139,6 +139,16 @@ export const GRADIENTS_DARK: Readonly<Record<ColorId, GradientFamily>> = Object.
   ]),
 ) as Record<ColorId, GradientFamily>;
 
+/** Light Mode circles: every tone of the palette at 90% of its saturation (same hue and brightness). */
+export const LIGHT_SATURATION = 0.9;
+
+export const GRADIENTS_LIGHT: Readonly<Record<ColorId, GradientFamily>> = Object.fromEntries(
+  Object.entries(GRADIENTS).map(([id, g]) => [
+    id,
+    Object.fromEntries(Object.entries(g).map(([tone, hex]) => [tone, saturateHex(hex, LIGHT_SATURATION)])) as unknown as GradientFamily,
+  ]),
+) as Record<ColorId, GradientFamily>;
+
 export type PaletteTheme = 'light' | 'dark';
 let activeTheme: PaletteTheme = 'light';
 
@@ -147,9 +157,9 @@ export function setPaletteTheme(theme: PaletteTheme) {
   activeTheme = theme;
 }
 
-/** A color's family for the active theme (Light Mode: the exact palette; Dark Mode: ×2.2325625 saturation, ×1.452 brightness, DARK_HUE for green and blue, DARK_MUTE). */
+/** A color's family for the active theme (Light Mode: the palette at LIGHT_SATURATION; Dark Mode: ×2.2325625 saturation, ×1.452 brightness, DARK_HUE for green and blue, DARK_MUTE). */
 export function gradientFor(color: ColorId, theme: PaletteTheme = activeTheme): GradientFamily {
-  return (theme === 'dark' ? GRADIENTS_DARK : GRADIENTS)[color];
+  return (theme === 'dark' ? GRADIENTS_DARK : GRADIENTS_LIGHT)[color];
 }
 
 /** A compact radial gradient for swatches, step dots and buttons. */
