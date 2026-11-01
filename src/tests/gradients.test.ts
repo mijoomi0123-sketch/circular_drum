@@ -36,8 +36,8 @@ describe('theme palettes', () => {
     const want = { orange: '#FFB771', yellow: '#FEF49D', green: '#ADF0E4', blue: '#ADDBFB', pink: '#FBCAE3', purple: '#D6BEFC', brown: '#BA9784' };
     for (const [id, hex] of Object.entries(want)) expect(gradientFor(id as keyof typeof want, 'light').base).toBe(hex);
   });
-  it('Dark Mode: every tone 2.480625× saturation (HSV, same hue and value), then ×1.452 brightness (clamped)', () => {
-    expect(DARK_SATURATION).toBeCloseTo(2.480625);
+  it('Dark Mode: every tone 2.2325625× saturation (HSV, same hue and value), then ×1.452 brightness (clamped)', () => {
+    expect(DARK_SATURATION).toBeCloseTo(2.2325625);
     expect(DARK_BRIGHTNESS).toBeCloseTo(1.452);
     for (const [id, g] of Object.entries(GRADIENTS)) {
       for (const [tone, hex] of Object.entries(g)) {
