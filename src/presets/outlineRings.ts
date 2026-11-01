@@ -29,7 +29,7 @@ export const MAX_RING_R = 158;
 /** Stroke width of a companion ring (drawing units); the form outline beside it is 2. */
 export const PAIR_RING_WIDTH = 1.4;
 /** Black space between a form's stroke and its companion ring's stroke (drawing units). */
-export const PAIR_CLEAR = 2.5;
+export const PAIR_CLEAR = 3.8;
 /** Half the form outline's stroke (DARK_FORM_STROKE / 2). */
 const FORM_HALF = 1;
 

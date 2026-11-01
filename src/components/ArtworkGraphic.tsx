@@ -172,8 +172,11 @@ const DARK_FORM_STROKE = 2;
  * Its outline keeps the same thin weight; the light around it does the rest.
  */
 const DARK_HIT = { share: 0.3, min: 20 };
-/** Dark Mode: the Kick's motion (its form's hit growth and the wave it sends through the rings) is a little calmer. */
-const DARK_MOTION: Partial<Record<Channel, number>> = { kick: 0.85 };
+/**
+ * Dark Mode motion strength per instrument (its form's hit growth and the wave it sends through the rings).
+ * The Kick moves most; the others are livelier than before but stay below it.
+ */
+const DARK_MOTION: Partial<Record<Channel, number>> = { kick: 1.08, snare: 1.12, hihat: 1.12, clap: 1.12 };
 
 /**
  * Dark Mode: the least black space between the strokes of two neighbouring
@@ -181,9 +184,9 @@ const DARK_MOTION: Partial<Record<Channel, number>> = { kick: 0.85 };
  * form strokes this is 5.5 between centres, just under the least gap the
  * forms keep at rest (6 × the artwork scale, 0.95–1), so rest sizes never move.
  */
-const RING_CLEAR = 3.5;
+const RING_CLEAR = 5;
 /** How far (drawing units) an inner companion ring swells with its own instrument's hit. */
-const PAIR_SWELL = 3;
+const PAIR_SWELL = 4.5;
 /** Dark Mode draws the whole circle a little smaller; strokes and glow keep their on-screen weight. */
 export const DARK_SCALE = 0.9;
 
