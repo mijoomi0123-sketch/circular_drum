@@ -482,6 +482,8 @@ function FullscreenCircle({
         paused={!settings.animate}
         preview={settings.audible ? voice.animator : preview}
         sounds={soundColors(a, settings.sound)}
+        // Circles that move without sound move a little less, so the playing one stands out.
+        silentMotion={FS_SILENT_MOTION}
         className="fs-art"
       />
     </div>
@@ -493,7 +495,22 @@ function FullscreenCircle({
  * the editor (its own steps, tempo and per-instrument motion), but silently.
  * While its preview plays, the forms follow the real sound instead.
  */
-function LibraryArt({ artwork: a, paused, preview, sounds, className = 'thumb-art' }: { artwork: Artwork; paused: boolean; preview?: DropletAnimator; sounds?: ChannelColors; className?: string }) {
+function LibraryArt({
+  artwork: a,
+  paused,
+  preview,
+  sounds,
+  silentMotion = 1,
+  className = 'thumb-art',
+}: {
+  artwork: Artwork;
+  paused: boolean;
+  preview?: DropletAnimator;
+  sounds?: ChannelColors;
+  /** How strongly it moves while following its silent rhythm (Fullscreen calms these so the playing one stands out). */
+  silentMotion?: number;
+  className?: string;
+}) {
   const key = `${a.bpm}|${a.steps}|${CHANNEL_KEYS.map((ch) => a.patterns[ch].slice(0, a.steps).map(Number).join('')).join('|')}`;
   const soundKey = CHANNEL_KEYS.map((ch) => (sounds ?? a.colors)[ch]).join();
   const rhythm = useMemo(
@@ -525,11 +542,15 @@ function LibraryArt({ artwork: a, paused, preview, sounds, className = 'thumb-ar
       idle
       paused={paused}
       animator={drive}
+      motion={moving ? silentMotion : 1}
     />
   );
 }
 
 const CHANNEL_KEYS = ['kick', 'snare', 'hihat', 'clap'] as const;
+
+/** Fullscreen: motion of a circle that animates without playing, relative to a playing one. */
+const FS_SILENT_MOTION = 0.7;
 
 /** Page on which the artwork at `index` appears. */
 export function pageOf(index: number): number {

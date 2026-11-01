@@ -36,6 +36,8 @@ interface Props {
   paused?: boolean;
   className?: string;
   label?: string;
+  /** Scales how far the forms and rings move on a hit (1 = full). Fullscreen calms circles that move silently. */
+  motion?: number;
 }
 
 type Stop = [offset: number, tone: keyof GradientFamily, opacity: number];
@@ -238,7 +240,7 @@ function transformOf(ring: Ring): string {
  * A requestAnimationFrame loop runs only while a size is moving or sound
  * events are pending or settling; at rest every attribute is written exactly.
  */
-export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle, paused, className, label }: Props) {
+export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle, paused, className, label, motion = 1 }: Props) {
   const { theme } = useSettings(); // re-render with the theme's palette (Dark Mode: more saturated, with a soft contour)
   const dark = theme === 'dark';
   // Dark Mode spaces the four instruments evenly inward from the Kick (see darkSizes).
@@ -263,6 +265,8 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
   const uid = useId().replace(/:/g, '');
   const idOf = (kind: 'g' | 'f', ch: Channel) => `${kind}-${ch}-${uid}`;
   const colorsRef = useRef(colors);
+  const motionRef = useRef(motion);
+  motionRef.current = motion;
   colorsRef.current = colors;
   const ringsRef = useRef(byZone);
   // Dark Mode: an instrument with no active steps never moves (its ring neither breathes nor follows the others).
@@ -339,7 +343,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
     };
     const growOf = (ch: Channel, tt: number) => {
       const r0 = sp[ch].x;
-      return (DARK_MOTION[ch] ?? 1) * actOf(ch, tt) * Math.max(r0 * DARK_HIT.share, DARK_HIT.min);
+      return motionRef.current * (DARK_MOTION[ch] ?? 1) * actOf(ch, tt) * Math.max(r0 * DARK_HIT.share, DARK_HIT.min);
     };
 
     const applyOutlines = (t: number | null) => {
@@ -368,10 +372,11 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
           energy = Math.max(energy, s.energy);
         }
         // An inner pair's ring follows only its own instrument, riding just outside its form.
-        if (!outer) return { r: follow + own * PAIR_SWELL, wave: own, energy };
+        const k = motionRef.current;
+        if (!outer) return { r: follow + k * own * PAIR_SWELL, wave: own, energy };
         const wave = 0.65 * own + 0.35 * all;
         const breathe = o.grow * 0.35 * Math.sin((2 * Math.PI * now) / o.period + o.delay);
-        return { r: Math.max(follow + own * PAIR_SWELL, o.r * (1 + breathe + wave * (OUTLINE_WAVE.near + OUTLINE_WAVE.far * out))), wave, energy };
+        return { r: Math.max(follow + k * own * PAIR_SWELL, o.r * (1 + breathe + k * wave * (OUTLINE_WAVE.near + OUTLINE_WAVE.far * out))), wave, energy };
       });
 
       // The neon swells with the circle's sound and settles back with it.
@@ -462,7 +467,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
           el.setAttribute('r', act === 0 ? String(r0) : capRadius(r0 + growOf(ch, t!)).toFixed(4));
           el.setAttribute('data-hit', act.toFixed(4));
         } else {
-          el.setAttribute('r', rest ? String(r0) : capRadius(r0 * (1 + m.growth * swell)).toFixed(4));
+          el.setAttribute('r', rest ? String(r0) : capRadius(r0 * (1 + motionRef.current * m.growth * swell)).toFixed(4));
         }
         el.setAttribute('transform', transformOf(ring));
         el.setAttribute('fill-opacity', rest ? String(ring.opacity) : Math.min(1, ring.opacity + m.fade * energy).toFixed(3));
