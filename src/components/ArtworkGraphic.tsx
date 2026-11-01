@@ -161,7 +161,9 @@ const OUTLINE_WAVE = { near: 0.14, far: 0.75, lag: 0.07 };
  * into the black without filling the inside. While the circle sounds, the
  * glows brighten with the hits (`boost`) and settle back as the sound fades.
  */
-const NEON_GLOW = { near: 1.1, mid: 2.6, midAlpha: 1.5, wide: 12, wideAlpha: 1.35, far: 36, farAlpha: 1.15, boost: { mid: 0.5, wide: 0.8, far: 1.1 } };
+/** Neon core: each line's own color mixed 30% toward white. */
+const NEON_CORE = '0.7 0 0 0 0.3  0 0.7 0 0 0.3  0 0 0.7 0 0.3  0 0 0 1 0';
+const NEON_GLOW = { near: 1.3, mid: 3.2, midAlpha: 2.2, wide: 12, wideAlpha: 1.7, far: 36, farAlpha: 1.3, innerWideAlpha: 0.9, boost: { mid: 0.5, wide: 0.8, far: 1.1 } };
 
 /** Dark Mode forms are drawn as outlines this wide (drawing units) instead of filled surfaces. */
 
@@ -640,17 +642,25 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
             {/* Dark Mode neon, in the lines' own colors, with the crisp strokes on top so the structure stays sharp:
                 every line gets a tight bloom and a close glow; the outer lines also a wide diffuse light that
                 fades gradually into the black (see NEON_GLOW). */}
-            <filter id={`neon-${uid}`} x="-15%" y="-15%" width="130%" height="130%" colorInterpolationFilters="sRGB">
+            <filter id={`neon-${uid}`} x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
               <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near / DARK_SCALE} result="near" />
               <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid / DARK_SCALE} result="midBlur" />
               <feComponentTransfer in="midBlur" result="mid">
                 <feFuncA data-part="neon-mid" type="linear" slope={NEON_GLOW.midAlpha} />
               </feComponentTransfer>
+              {/* Inner lines glow like neon tubes too: a soft halo around each, kept close so the black between them stays. */}
+              <feGaussianBlur in="SourceGraphic" stdDeviation={(NEON_GLOW.wide * 0.5) / DARK_SCALE} result="innerWideBlur" />
+              <feComponentTransfer in="innerWideBlur" result="innerWide">
+                <feFuncA type="linear" slope={NEON_GLOW.innerWideAlpha} />
+              </feComponentTransfer>
+              {/* Neon tube: a hotter, whiter core on the line itself; the color lives in the glow around it. */}
+              <feColorMatrix in="SourceGraphic" type="matrix" values={NEON_CORE} result="core" />
               <feMerge>
+                <feMergeNode in="innerWide" />
                 <feMergeNode in="mid" />
                 <feMergeNode in="near" />
                 <feMergeNode in="near" />
-                <feMergeNode in="SourceGraphic" />
+                <feMergeNode in="core" />
               </feMerge>
             </filter>
             <filter id={`aura-${uid}`} x="-75%" y="-75%" width="250%" height="250%" colorInterpolationFilters="sRGB">
@@ -667,13 +677,15 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
               <feComponentTransfer in="farBlur" result="far">
                 <feFuncA data-part="neon-far" type="linear" slope={NEON_GLOW.farAlpha} />
               </feComponentTransfer>
+              {/* Neon tube: a hotter, whiter core on the line itself; the color lives in the glow around it. */}
+              <feColorMatrix in="SourceGraphic" type="matrix" values={NEON_CORE} result="core" />
               <feMerge>
                 <feMergeNode in="far" />
                 <feMergeNode in="wide" />
                 <feMergeNode in="mid" />
                 <feMergeNode in="near" />
                 <feMergeNode in="near" />
-                <feMergeNode in="SourceGraphic" />
+                <feMergeNode in="core" />
               </feMerge>
             </filter>
           </>
