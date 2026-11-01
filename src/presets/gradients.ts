@@ -39,10 +39,10 @@ export const GRADIENTS: Readonly<Record<ColorId, GradientFamily>> = {
 
 /**
  * How much more saturated the palette is in Dark Mode: ×1.4, then a further
- * +25% of that (×1.25), then +5% more (×1.05), then +50% more (×1.5):
- * ×2.75625 of the Light Mode base, clamped to 100%.
+ * +25% of that (×1.25), then +5% more (×1.05), then +50% more (×1.5),
+ * then 10% less (×0.9): ×2.480625 of the Light Mode base, clamped to 100%.
  */
-export const DARK_SATURATION = 1.4 * 1.25 * 1.05 * 1.5;
+export const DARK_SATURATION = 1.4 * 1.25 * 1.05 * 1.5 * 0.9;
 
 /**
  * Dark Mode hues for green and blue. Brightening clips both toward cyan
@@ -84,8 +84,8 @@ export function saturateHex(hex: string, factor: number): string {
   return `#${ch(r)}${ch(g)}${ch(b)}`.toUpperCase();
 }
 
-/** Dark Mode brightness: every channel ×1.2, then +10% more (×1.32 in all), clamped to 255. */
-export const DARK_BRIGHTNESS = 1.2 * 1.1;
+/** Dark Mode brightness: every channel ×1.2, then +10% more, then +10% more (×1.452 in all), clamped to 255. */
+export const DARK_BRIGHTNESS = 1.2 * 1.1 * 1.1;
 
 /** One color with every RGB channel multiplied by `factor`, clamped. */
 export function brightenHex(hex: string, factor: number): string {
@@ -95,8 +95,8 @@ export function brightenHex(hex: string, factor: number): string {
 }
 
 /**
- * Dark Mode families: every tone of each Light Mode family, ×2.75625 saturation,
- * then ×1.32 brighter (green and blue then turned to DARK_HUE). Always derived
+ * Dark Mode families: every tone of each Light Mode family, ×2.480625 saturation,
+ * then ×1.452 brighter (green and blue then turned to DARK_HUE). Always derived
  * from GRADIENTS, never from itself.
  */
 export const GRADIENTS_DARK: Readonly<Record<ColorId, GradientFamily>> = Object.fromEntries(
@@ -120,7 +120,7 @@ export function setPaletteTheme(theme: PaletteTheme) {
   activeTheme = theme;
 }
 
-/** A color's family for the active theme (Light Mode: the exact palette; Dark Mode: ×2.75625 saturation, ×1.32 brightness, DARK_HUE for green and blue). */
+/** A color's family for the active theme (Light Mode: the exact palette; Dark Mode: ×2.480625 saturation, ×1.452 brightness, DARK_HUE for green and blue). */
 export function gradientFor(color: ColorId, theme: PaletteTheme = activeTheme): GradientFamily {
   return (theme === 'dark' ? GRADIENTS_DARK : GRADIENTS)[color];
 }

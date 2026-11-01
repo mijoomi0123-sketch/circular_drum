@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brightenHex, DARK_HUE, DARK_SATURATION, GRADIENTS, GRADIENTS_DARK, gradientFor, saturateHex, withHue } from '../presets/gradients';
+import { brightenHex, DARK_BRIGHTNESS, DARK_HUE, DARK_SATURATION, GRADIENTS, GRADIENTS_DARK, gradientFor, saturateHex, withHue } from '../presets/gradients';
 
 function hue(hex: string): number {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -36,8 +36,9 @@ describe('theme palettes', () => {
     const want = { orange: '#FFB771', yellow: '#FEF49D', green: '#ADF0E4', blue: '#ADDBFB', pink: '#FBCAE3', purple: '#D6BEFC', brown: '#BA9784' };
     for (const [id, hex] of Object.entries(want)) expect(gradientFor(id as keyof typeof want, 'light').base).toBe(hex);
   });
-  it('Dark Mode: every tone 2.75625× saturation (HSV, same hue and value), then ×1.32 brightness (clamped)', () => {
-    expect(DARK_SATURATION).toBeCloseTo(2.75625);
+  it('Dark Mode: every tone 2.480625× saturation (HSV, same hue and value), then ×1.452 brightness (clamped)', () => {
+    expect(DARK_SATURATION).toBeCloseTo(2.480625);
+    expect(DARK_BRIGHTNESS).toBeCloseTo(1.452);
     for (const [id, g] of Object.entries(GRADIENTS)) {
       for (const [tone, hex] of Object.entries(g)) {
         const sat = saturateHex(hex, DARK_SATURATION);
@@ -46,7 +47,7 @@ describe('theme palettes', () => {
         expect(s1, `${id} ${tone}`).toBeCloseTo(Math.min(1, s0 * DARK_SATURATION), 1);
         expect(Math.abs(v1 - v0), `${id} ${tone} value`).toBeLessThanOrEqual(1);
         if (s0 > 0.05) expect(Math.abs(((h1 - h0 + 540) % 360) - 180), `${id} ${tone} hue`).toBeLessThan(3);
-        const lit = brightenHex(sat, 1.2 * 1.1);
+        const lit = brightenHex(sat, DARK_BRIGHTNESS);
         const h = DARK_HUE[id as keyof typeof GRADIENTS];
         expect(GRADIENTS_DARK[id as keyof typeof GRADIENTS][tone as keyof typeof g]).toBe(h === undefined ? lit : withHue(lit, h));
       }
@@ -55,7 +56,7 @@ describe('theme palettes', () => {
     expect(brightenHex('#F0A000', 1.2)).toBe('#FFC000');
   });
   it('is always derived from the Light palette, never compounding', () => {
-    expect(gradientFor('orange', 'dark').base).toBe(brightenHex(saturateHex(GRADIENTS.orange.base, DARK_SATURATION), 1.2 * 1.1));
+    expect(gradientFor('orange', 'dark').base).toBe(brightenHex(saturateHex(GRADIENTS.orange.base, DARK_SATURATION), DARK_BRIGHTNESS));
     expect(gradientFor('blue', 'dark').base).toBe(gradientFor('blue', 'dark').base);
     expect(gradientFor('blue', 'light').base).toBe('#ADDBFB');
   });
