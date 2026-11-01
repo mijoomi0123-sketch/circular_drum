@@ -154,8 +154,14 @@ const FILTER_REGION_NEON = regions(NEON.spread);
  * over neighbouring circles.
  */
 const OUTLINE_WAVE = { near: 0.14, far: 0.75, lag: 0.07 };
-/** Their neon: a tight bloom, and a wide one strengthened by `farAlpha` (blur radii in drawing units). */
-const OUTLINE_GLOW = { near: 1.1, far: 4.5, farAlpha: 2.2 };
+/**
+ * Dark Mode neon (blur radii in drawing units): a tight bloom and a close
+ * glow on every line, plus, around the outer lines only, a wide light and a
+ * far, faint one, so the light is strongest at the rings and fades gradually
+ * into the black without filling the inside. While the circle sounds, the
+ * glows brighten with the hits (`boost`) and settle back as the sound fades.
+ */
+const NEON_GLOW = { near: 1.1, mid: 2.6, midAlpha: 1.5, wide: 8, wideAlpha: 0.75, far: 20, farAlpha: 0.5, boost: { mid: 0.5, wide: 0.7, far: 1 } };
 
 /** Dark Mode forms are drawn as outlines this wide (drawing units) instead of filled surfaces. */
 const DARK_FORM_STROKE = 2;
@@ -177,16 +183,6 @@ const RING_CLEAR = 3.5;
 /** Next to a ring (whose neon bloom is wider), the clear space is wider too. */
 const RING_CLEAR_WIDE = 8;
 
-/**
- * Dark Mode size order: the four sizes from the rhythm (presets/sizing.ts),
- * handed out largest first as Kick, Hi-hat, Snare, Clap/Cymbal, so the
- * hierarchy always holds while each artwork keeps its own proportions.
- */
-export const DARK_SIZE_ORDER: readonly Channel[] = ['kick', 'hihat', 'snare', 'clap'];
-function darkHierarchy(sizes: Record<Channel, number>): Record<Channel, number> {
-  const r = Object.values(sizes).sort((a, b) => b - a);
-  return Object.fromEntries(DARK_SIZE_ORDER.map((ch, i) => [ch, r[i]])) as Record<Channel, number>;
-}
 
 /** Spring rate of size changes (rad/s); critically damped, so no bounce. */
 const SIZE_SPRING = 9;
@@ -232,7 +228,7 @@ function transformOf(ring: Ring): string {
  */
 export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle, paused, className, label }: Props) {
   const { theme } = useSettings(); // re-render with the theme's palette (Dark Mode: more saturated, with a soft contour)
-  const sizes = theme === 'dark' ? darkHierarchy(circleSizes(patterns, steps)) : circleSizes(patterns, steps);
+  const sizes = circleSizes(patterns, steps); // the same in both themes
   const sizeKey = CHANNELS.map((ch) => sizes[ch].toFixed(4)).join();
   const rings = useMemo(() => buildRings(design, sizes), [design.seed, sizeKey]);
   const byZone = useMemo(() => Object.fromEntries(rings.map((r) => [r.zone, r])) as Record<Channel, Ring>, [rings]);
@@ -338,6 +334,18 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         const breathe = o.grow * 0.35 * Math.sin((2 * Math.PI * now) / o.period + o.delay);
         return { r: o.r * (1 + breathe + wave * (OUTLINE_WAVE.near + OUTLINE_WAVE.far * out)), wave, energy };
       });
+
+      // The neon swells with the circle's sound and settles back with it.
+      const glow = live ? Math.max(...want.map((w) => w.energy), 0) : 0;
+      // Looked up each time: the filter only exists while Dark Mode is on.
+      for (const [part, base, boost] of [
+        ['mid', NEON_GLOW.midAlpha, NEON_GLOW.boost.mid],
+        ['wide', NEON_GLOW.wideAlpha, NEON_GLOW.boost.wide],
+        ['far', NEON_GLOW.farAlpha, NEON_GLOW.boost.far],
+      ] as const) {
+        svg?.querySelectorAll(`[data-part="neon-${part}"]`).forEach((fn) => fn.setAttribute('slope', (base * (1 + boost * glow)).toFixed(3)));
+      }
+      svg?.setAttribute('data-neon', glow.toFixed(4));
 
       // Every line of the circle in rest order, pushed apart where they would meet.
       const lines = [
@@ -479,6 +487,52 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
   // A pattern edit, a new step count or a restored artwork: glide to the new sizes.
   useEffect(() => wakeRef.current(), [rings]);
 
+  const outerFormR = byZone[order[0]].r;
+  const formEl = (zone: Channel) => {
+    const ring = byZone[zone];
+    const r0 = springs.current![zone].x;
+    return (
+      <g key={zone} className="form-drift">
+        <g className="form-breathe">
+          <circle
+            ref={(el) => {
+              refs.current[zone] = el;
+            }}
+            data-zone={zone}
+            data-color={colors[zone]}
+            data-r0={r0}
+            data-target={ring.r}
+            data-glow={glowOf(zone, order[0] === zone, dark).alpha}
+            cx={0}
+            cy={0}
+            r={r0}
+            transform={transformOf(ring)}
+            // Dark Mode: no filled surface, only the form's glowing outline (rings fill the inside).
+            fill={dark ? 'none' : `url(#${idOf('g', zone)})`}
+            stroke={dark ? gradientFor(colors[zone]).base : undefined}
+            strokeWidth={dark ? DARK_FORM_STROKE : undefined}
+            fillOpacity={ring.opacity}
+            // Dark Mode's light comes from the shared neon filters around the lines.
+            filter={dark ? undefined : `url(#${idOf('f', zone)})`}
+          />
+        </g>
+      </g>
+    );
+  };
+  // Dark Mode only: thin concentric outlines over and around the forms (presets/outlineRings.ts).
+  const ringEl = (o: (typeof outlines)[number], i: number) => (
+    <g
+      key={`ring-${i}`}
+      className="outline-ring"
+      data-zone={o.zone}
+      ref={(el) => {
+        ringEls.current[i] = el;
+      }}
+    >
+      <circle cx={0} cy={0} r={o.r} fill="none" stroke={gradientFor(colors[o.zone])[o.tone]} strokeWidth={o.width} strokeOpacity={o.opacity} />
+    </g>
+  );
+
   return (
     <div className={`art-box${className ? ` ${className}` : ''}`} role="img" aria-label={label}>
     <svg
@@ -530,76 +584,64 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
           );
         })}
         {dark && (
-          // Neon around the outline rings: a tight bright bloom and a wide soft one in their own colors, with the crisp stroke on top.
-          <filter id={`rings-${uid}`} x="-25%" y="-25%" width="150%" height="150%" colorInterpolationFilters="sRGB">
-            <feGaussianBlur in="SourceGraphic" stdDeviation={OUTLINE_GLOW.near} result="near" />
-            <feGaussianBlur in="SourceGraphic" stdDeviation={OUTLINE_GLOW.far} result="farBlur" />
-            <feComponentTransfer in="farBlur" result="far">
-              <feFuncA type="linear" slope={OUTLINE_GLOW.farAlpha} />
-            </feComponentTransfer>
-            <feMerge>
-              <feMergeNode in="far" />
-              <feMergeNode in="near" />
-              <feMergeNode in="near" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
+          <>
+            {/* Dark Mode neon, in the lines' own colors, with the crisp strokes on top so the structure stays sharp:
+                every line gets a tight bloom and a close glow; the outer lines also a wide diffuse light that
+                fades gradually into the black (see NEON_GLOW). */}
+            <filter id={`neon-${uid}`} x="-15%" y="-15%" width="130%" height="130%" colorInterpolationFilters="sRGB">
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near} result="near" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid} result="midBlur" />
+              <feComponentTransfer in="midBlur" result="mid">
+                <feFuncA data-part="neon-mid" type="linear" slope={NEON_GLOW.midAlpha} />
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode in="mid" />
+                <feMergeNode in="near" />
+                <feMergeNode in="near" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+            <filter id={`aura-${uid}`} x="-40%" y="-40%" width="180%" height="180%" colorInterpolationFilters="sRGB">
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near} result="near" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid} result="midBlur" />
+              <feComponentTransfer in="midBlur" result="mid">
+                <feFuncA data-part="neon-mid" type="linear" slope={NEON_GLOW.midAlpha} />
+              </feComponentTransfer>
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.wide} result="wideBlur" />
+              <feComponentTransfer in="wideBlur" result="wide">
+                <feFuncA data-part="neon-wide" type="linear" slope={NEON_GLOW.wideAlpha} />
+              </feComponentTransfer>
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.far} result="farBlur" />
+              <feComponentTransfer in="farBlur" result="far">
+                <feFuncA data-part="neon-far" type="linear" slope={NEON_GLOW.farAlpha} />
+              </feComponentTransfer>
+              <feMerge>
+                <feMergeNode in="far" />
+                <feMergeNode in="wide" />
+                <feMergeNode in="mid" />
+                <feMergeNode in="near" />
+                <feMergeNode in="near" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </>
         )}
       </defs>
-      {order.map((zone) => {
-        const ring = byZone[zone];
-        const r0 = springs.current![zone].x;
-        return (
-          <g key={zone} className="form-drift">
-            <g className="form-breathe">
-              <circle
-                ref={(el) => {
-                  refs.current[zone] = el;
-                }}
-                data-zone={zone}
-                data-color={colors[zone]}
-                data-r0={r0}
-                data-target={ring.r}
-                data-glow={glowOf(zone, order[0] === zone, theme === 'dark').alpha}
-                cx={0}
-                cy={0}
-                r={r0}
-                transform={transformOf(ring)}
-                // Dark Mode: no filled surface, only the form's glowing outline (rings fill the inside).
-                fill={dark ? 'none' : `url(#${idOf('g', zone)})`}
-                stroke={dark ? gradientFor(colors[zone]).base : undefined}
-                strokeWidth={dark ? DARK_FORM_STROKE : undefined}
-                fillOpacity={ring.opacity}
-                filter={`url(#${idOf('f', zone)})`}
-              />
-            </g>
+      {dark ? (
+        <>
+          {/* Inner lines: crisp neon with a close glow, so the inside stays dark and open. */}
+          <g className="neon" filter={`url(#neon-${uid})`}>
+            {order.slice(1).map(formEl)}
+            {outlines.map((o, i) => (o.r < outerFormR ? ringEl(o, i) : null))}
           </g>
-        );
-      })}
-      {dark && (
-        // Dark Mode only: thin concentric outlines over and around the forms (presets/outlineRings.ts).
-        <g className="outline-rings" filter={`url(#rings-${uid})`}>
-          {outlines.map((o, i) => (
-            <g
-              key={i}
-              className="outline-ring"
-              data-zone={o.zone}
-              ref={(el) => {
-                ringEls.current[i] = el;
-              }}
-            >
-              <circle
-                cx={0}
-                cy={0}
-                r={o.r}
-                fill="none"
-                stroke={gradientFor(colors[o.zone])[o.tone]}
-                strokeWidth={o.width}
-                strokeOpacity={o.opacity}
-              />
-            </g>
-          ))}
-        </g>
+          {/* The outermost line and the rings beyond it also send a wide, soft light out into the black. */}
+          <g className="neon-aura" filter={`url(#aura-${uid})`}>
+            {formEl(order[0])}
+            {outlines.map((o, i) => (o.r >= outerFormR ? ringEl(o, i) : null))}
+          </g>
+        </>
+      ) : (
+        order.map(formEl)
       )}
     </svg>
     </div>

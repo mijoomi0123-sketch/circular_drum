@@ -2,30 +2,32 @@ import { CHANNELS } from '../audio/channels';
 import type { Channel, ChannelPatterns } from '../types';
 
 /**
- * Circle sizes from rhythmic density.
+ * Circle sizes: the instrument sets the size level, the rhythm sets where in
+ * that level the circle sits. The same in Light and Dark Mode.
  *
- * Each instrument's base radius (radius-100 space) comes from how many of its
- * steps are on, compared with the other instruments, plus a small fixed bias
- * Kick > Snare > Hi-hat > Clap. Only the step rows and the step count go in:
- * BPM, colors and the playhead never change a size.
+ * Levels, largest first: Kick > Snare > Hi-hat > Clap/Cymbal. Each owns its
+ * own band of radii (radius-100 space), BAND wide, with MIN_GAP between
+ * neighbouring bands, so the order can never change and every level reads
+ * clearly. Inside its band a circle grows with how many of its steps are on,
+ * compared with the other instruments. Only the step rows and the step count
+ * go in: BPM, colors and the playhead never change a size.
  *
  *   ratio    = activeSteps / steps                   (0 … 1)
  *   relative = ratio / densest instrument's ratio     (0 … 1, 0 when all empty)
- *   density  = 0.6·relative + 0.4·√ratio
- *   f        = 0.1 + 0.68·density + bias              (bias: 0.15 / 0.10 / 0.05 / 0)
- *   r        = MIN_R + (MAX_R − MIN_R)·f
+ *   density  = 0.6·relative + 0.4·√ratio            (0 … 1)
+ *   r        = band's inner edge + BAND·density
  *
- * Then, largest first (ties in hierarchy order), each circle is kept at least
- * MIN_GAP inside the previous one so no two edges sit on top of each other,
- * and none falls below MIN_R.
+ * More steps on a row always means a larger (never smaller) circle.
  */
 export const MIN_R = 14;
 export const MAX_R = 86;
-export const MIN_GAP = 6;
+/** Least difference between two instruments' radii, so every size level reads clearly. */
+export const MIN_GAP = 10;
+/** Width of each instrument's band of radii: four bands and three gaps fill MIN_R … MAX_R. */
+export const BAND = (MAX_R - MIN_R - 3 * MIN_GAP) / 4;
 
-/** Default hierarchy, also the tie-break order. */
+/** The fixed size order, largest first (both themes). */
 export const SIZE_PRIORITY: readonly Channel[] = ['kick', 'snare', 'hihat', 'clap'];
-export const SIZE_BIAS: Record<Channel, number> = { kick: 0.15, snare: 0.1, hihat: 0.05, clap: 0 };
 
 export type CircleSizes = Record<Channel, number>;
 
@@ -42,22 +44,13 @@ export function circleSizes(patterns: ChannelPatterns, steps: number): CircleSiz
   const counts = activeSteps(patterns, n);
   const maxRatio = Math.max(...CHANNELS.map((ch) => counts[ch] / n));
 
-  const raw = {} as CircleSizes;
-  for (const ch of CHANNELS) {
+  const out = {} as CircleSizes;
+  SIZE_PRIORITY.forEach((ch, level) => {
     const ratio = counts[ch] / n;
     const relative = maxRatio > 0 ? ratio / maxRatio : 0;
     const density = 0.6 * relative + 0.4 * Math.sqrt(ratio);
-    const f = 0.1 + 0.68 * density + SIZE_BIAS[ch];
-    raw[ch] = MIN_R + (MAX_R - MIN_R) * Math.min(1, f);
-  }
-
-  // Largest first; equal sizes keep the hierarchy order.
-  const order = [...SIZE_PRIORITY].sort((a, b) => raw[b] - raw[a] || SIZE_PRIORITY.indexOf(a) - SIZE_PRIORITY.indexOf(b));
-  const r = order.map((ch) => raw[ch]);
-  for (let i = 1; i < r.length; i++) r[i] = Math.min(r[i], r[i - 1] - MIN_GAP);
-  for (let i = r.length - 1; i >= 0; i--) r[i] = Math.max(r[i], MIN_R + (r.length - 1 - i) * MIN_GAP);
-
-  const out = {} as CircleSizes;
-  order.forEach((ch, i) => (out[ch] = r[i]));
+    const top = MAX_R - level * (BAND + MIN_GAP);
+    out[ch] = top - BAND + BAND * Math.min(1, density);
+  });
   return out;
 }

@@ -17,7 +17,7 @@ describe('playing circle: one shared target size', () => {
     const design = { seed: 7 } as never;
     const small = outerForm({ design, patterns: pats(0, 0, 0, 1), steps: 16 });
     const large = outerForm({ design, patterns: pats(16, 8, 4, 2), steps: 16 });
-    expect(small.r).toBeLessThan(large.r - 10);
+    expect(small.r).toBeLessThan(large.r - 8); // the Kick is always the outer form; its band is BAND wide
     expect(small.r * playBoost(small.r)).toBeCloseTo(large.r * playBoost(large.r), 10);
     expect(large.r).toBeLessThanOrEqual(TARGET_R);
   });

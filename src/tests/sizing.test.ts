@@ -28,12 +28,20 @@ describe('circle sizes from active steps', () => {
     }
   });
 
-  it('16 steps, Kick 4 and Snare 8: Snare is larger than Kick', () => {
-    const s = circleSizes(withCounts({ kick: 4, snare: 8 }, 16), 16);
-    expect(s.snare).toBeGreaterThan(s.kick);
-    // The same holds whatever the other two rows do.
-    const s2 = circleSizes(withCounts({ kick: 4, snare: 8, hihat: 16, clap: 2 }, 16), 16);
-    expect(s2.snare).toBeGreaterThan(s2.kick);
+  it('the order is always Kick > Snare > Hi-hat > Clap, at least MIN_GAP apart, whatever the step counts', () => {
+    for (const [k, s, h, c] of [[4, 8, 0, 0], [4, 8, 16, 2], [1, 1, 16, 16], [0, 0, 0, 16], [16, 4, 4, 4], [2, 2, 2, 2]]) {
+      const r = circleSizes(withCounts({ kick: k, snare: s, hihat: h, clap: c }, 16), 16);
+      expect(ordered(r), `${k} ${s} ${h} ${c}`).toEqual(['kick', 'snare', 'hihat', 'clap']);
+      expect(r.kick - r.snare).toBeGreaterThanOrEqual(MIN_GAP - 1e-9);
+      expect(r.snare - r.hihat).toBeGreaterThanOrEqual(MIN_GAP - 1e-9);
+      expect(r.hihat - r.clap).toBeGreaterThanOrEqual(MIN_GAP - 1e-9);
+    }
+  });
+
+  it('a busier Snare is still bigger than a quieter Snare (steps still matter)', () => {
+    const quiet = circleSizes(withCounts({ kick: 8, snare: 2, hihat: 4, clap: 2 }, 16), 16);
+    const busy = circleSizes(withCounts({ kick: 8, snare: 8, hihat: 4, clap: 2 }, 16), 16);
+    expect(busy.snare).toBeGreaterThan(quiet.snare);
   });
 
   it('more active steps never makes a circle smaller', () => {
@@ -66,7 +74,7 @@ describe('circle sizes from active steps', () => {
       const p = emptyPatterns();
       for (const ch of CHANNELS) for (let i = 0; i < 32; i++) p[ch][i] = rnd() < rnd();
       const s = circleSizes(p, steps);
-      const r = CHANNELS.map((ch) => s[ch]).sort((a, b) => b - a);
+      const r = (['kick', 'snare', 'hihat', 'clap'] as const).map((ch) => s[ch]);
       for (const x of r) {
         expect(Number.isFinite(x)).toBe(true);
         expect(x).toBeGreaterThanOrEqual(MIN_R);
