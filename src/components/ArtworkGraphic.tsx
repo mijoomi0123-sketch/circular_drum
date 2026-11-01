@@ -48,7 +48,7 @@ type Stop = [offset: number, tone: keyof GradientFamily, opacity: number];
  *   kick   dense: a deep core spreading through rich and base to a light rim
  *   snare  energetic: a luminous light core inside a saturated body
  *   hihat  airy: a lighter membrane whose color gathers at the rim
- *   clap   bright: its own color right to the centre, deepening into its rich tone
+ *   clap   solid: one even rich tone from the centre to its rim (no paler centre)
  *
  * The outermost form holds its colors to a clean, precise silhouette (the
  * edge blur only anti-aliases). Every form inside it thins out over its last
@@ -72,10 +72,11 @@ const STOPS: Record<Channel, { outer: Stop[]; inner: Stop[] }> = {
     outer: [[0, 'base', 0.9], [0.45, 'base', 0.88], [0.72, 'base', 0.86], [0.86, 'base', 0.84], [0.95, 'rich', 0.8], [1, 'rich', 0.76]],
     inner: [[0, 'base', 0.9], [0.42, 'base', 0.88], [0.66, 'base', 0.8], [0.8, 'base', 0.6], [0.92, 'rich', 0.25], [1, 'rich', 0]],
   },
-  // Centres are filled with the color itself (no near-white light tone), so no white spot shows in the middle.
+  // The innermost circle is one solid color, its rich tone, from the centre out to its rim, so the
+  // centre is filled with exactly the color of the ring around it (no paler or white spot in the middle).
   clap: {
-    outer: [[0, 'base', 1], [0.26, 'base', 1], [0.6, 'rich', 1], [0.8, 'rich', 1], [0.93, 'rich', 0.94], [1, 'rich', 0.88]],
-    inner: [[0, 'base', 1], [0.24, 'base', 1], [0.54, 'rich', 1], [0.72, 'rich', 0.8], [0.88, 'rich', 0.35], [1, 'rich', 0]],
+    outer: [[0, 'rich', 1], [0.26, 'rich', 1], [0.6, 'rich', 1], [0.8, 'rich', 1], [0.93, 'rich', 0.94], [1, 'rich', 0.88]],
+    inner: [[0, 'rich', 1], [0.24, 'rich', 1], [0.54, 'rich', 1], [0.72, 'rich', 0.8], [0.88, 'rich', 0.35], [1, 'rich', 0]],
   },
 };
 /** The outermost form keeps a clean silhouette; forms inside it thin out over their last quarter and melt into the color around them. */
