@@ -106,3 +106,13 @@ export function SearchIcon({ size = 15 }: { size?: number }) {
     </svg>
   );
 }
+
+/** Two crossing arrows: shuffle / randomize. */
+export function ShuffleIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h3c4 0 4 8 8 8h3M14 11.5l3 2.5-3 2.5" />
+      <path d="M3 14h3c1.4 0 2.3-1 3-2.3M11 8.3C11.7 7 12.6 6 14 6h3M14 3.5 17 6l-3 2.5" />
+    </svg>
+  );
+}

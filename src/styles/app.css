@@ -513,6 +513,47 @@ input:focus-visible {
   cursor: default;
 }
 
+/* Randomize Layout: a clear, filled pill with a shuffle icon, so it is easy to find. */
+.le-random {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 18px 0 14px;
+  border-radius: 19px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--canvas);
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: transform 160ms var(--ease-soft), opacity 160ms;
+}
+
+.le-random svg {
+  transition: transform 320ms var(--ease-soft);
+}
+
+.le-random:hover:not(:disabled) svg,
+.le-random:focus-visible svg {
+  transform: rotate(180deg);
+}
+
+.le-random:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.le-random:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+
+.le-random:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 
 
 

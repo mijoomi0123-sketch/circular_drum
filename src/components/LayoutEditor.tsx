@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
 import { createPortal } from 'react-dom';
 import type { Artwork } from '../types';
 import { ArtworkGraphic } from './ArtworkGraphic';
-import { SearchIcon } from './PlayIcons';
+import { SearchIcon, ShuffleIcon } from './PlayIcons';
 import {
   MAX_GRID,
   occupant,
@@ -293,8 +293,9 @@ export function LayoutEditor({ artworks, initial, onCancel, onApply }: Props) {
             </div>
 
             <div className="le-tools">
-              <button type="button" className="text-btn" onClick={() => setLayout((l) => randomize(l))} disabled={!layout.ids.length}>
-                Randomize Layout
+              <button type="button" className="le-random" onClick={() => setLayout((l) => randomize(l))} disabled={!layout.ids.length}>
+                <ShuffleIcon />
+                <span>Randomize Layout</span>
               </button>
             </div>
             <p className="le-hint">Drag circles between cells. Cells can stay empty.</p>
