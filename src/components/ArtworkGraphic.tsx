@@ -9,7 +9,7 @@ import { buildOutlineRings, DARK_FORM_STROKE, darkSizes, PAIR_CLEAR } from '../p
 import { overlapState } from '../animation/overlap';
 import { darkContour, darkLift, gradientFor, GRADIENTS, type ColorStop, type GradientFamily } from '../presets/gradients';
 import { useSettings } from '../storage/settingsStore';
-import { circleSizes, SIZE_PRIORITY } from '../presets/sizing';
+import { activeSteps, circleSizes, SIZE_PRIORITY } from '../presets/sizing';
 import type { ArtworkDesign, Channel, ChannelColors, ChannelPatterns, Ring } from '../types';
 
 const VIEW = 106;
@@ -161,7 +161,7 @@ const OUTLINE_WAVE = { near: 0.14, far: 0.75, lag: 0.07 };
  * into the black without filling the inside. While the circle sounds, the
  * glows brighten with the hits (`boost`) and settle back as the sound fades.
  */
-const NEON_GLOW = { near: 1.1, mid: 2.6, midAlpha: 1.5, wide: 9, wideAlpha: 1.05, far: 26, farAlpha: 0.8, boost: { mid: 0.5, wide: 0.7, far: 1 } };
+const NEON_GLOW = { near: 1.1, mid: 2.6, midAlpha: 1.5, wide: 12, wideAlpha: 1.35, far: 36, farAlpha: 1.15, boost: { mid: 0.5, wide: 0.8, far: 1.1 } };
 
 /** Dark Mode forms are drawn as outlines this wide (drawing units) instead of filled surfaces. */
 
@@ -173,9 +173,9 @@ const NEON_GLOW = { near: 1.1, mid: 2.6, midAlpha: 1.5, wide: 9, wideAlpha: 1.05
 const DARK_HIT = { share: 0.3, min: 20 };
 /**
  * Dark Mode motion strength per instrument (its form's hit growth and the wave it sends through the rings).
- * The Kick moves most; the others are livelier than before but stay below it.
+ * The Kick moves most; Snare and Hi-hat are lively but stay below it; the small Clap/Cymbal moves least.
  */
-const DARK_MOTION: Partial<Record<Channel, number>> = { kick: 1.08, snare: 1.12, hihat: 1.12, clap: 1.12 };
+const DARK_MOTION: Partial<Record<Channel, number>> = { kick: 1.08, snare: 1.12, hihat: 1.12, clap: 0.65 };
 
 /**
  * Dark Mode: the least black space between the strokes of two neighbouring
@@ -186,6 +186,10 @@ const DARK_MOTION: Partial<Record<Channel, number>> = { kick: 1.08, snare: 1.12,
 const RING_CLEAR = 5;
 /** How far (drawing units) an inner companion ring swells with its own instrument's hit. */
 const PAIR_SWELL = 4.5;
+/** Seconds the outer ring of a pair trails its inner line (the form): it reacts just after it. */
+const PAIR_LAG = 0.035;
+/** While moving, the trailing outer ring may come this close to its form (drawing units) before it is pushed. */
+const PAIR_CLEAR_LIVE = 1.2;
 /** Dark Mode draws the whole circle a little smaller; strokes and glow keep their on-screen weight. */
 export const DARK_SCALE = 0.9;
 
@@ -259,6 +263,9 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
   const colorsRef = useRef(colors);
   colorsRef.current = colors;
   const ringsRef = useRef(byZone);
+  // Dark Mode: an instrument with no active steps never moves (its ring neither breathes nor follows the others).
+  const activeRef = useRef(activeSteps(patterns, steps));
+  activeRef.current = activeSteps(patterns, steps);
   ringsRef.current = byZone;
   const wakeRef = useRef<() => void>(() => {});
 
@@ -317,6 +324,22 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
      * line that would reach the next one pushes it outward instead, so rings
      * never touch, cross or stack, even on the strongest hit.
      */
+    /**
+     * Dark Mode hit growth of one form at time `tt` (drawing units): it grows by a clearly visible amount
+     * whatever its size and follows its sound as it rings out. √ lifts soft hits (a quiet Hi-hat), so every
+     * instrument shows clearly; full hits stay at 1.
+     */
+    const actOf = (ch: Channel, tt: number) => {
+      if (!animator) return 0;
+      const s = animator.sample(tt, ch);
+      const raw = Math.max(0, s.swell, animator.presence(tt, ch));
+      return raw < 0.002 ? 0 : Math.min(1.1, Math.sqrt(raw));
+    };
+    const growOf = (ch: Channel, tt: number) => {
+      const r0 = sp[ch].x;
+      return (DARK_MOTION[ch] ?? 1) * actOf(ch, tt) * Math.max(r0 * DARK_HIT.share, DARK_HIT.min);
+    };
+
     const applyOutlines = (t: number | null) => {
       const list = outlinesRef.current;
       if (!darkRef.current) return;
@@ -325,9 +348,13 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
       const now = performance.now() / 1000;
       const want = list.map((o) => {
         if (!live) return { r: o.r, wave: 0, energy: 0 };
+        // A silent instrument (no active steps) keeps its ring exactly still.
+        if (!activeRef.current[o.zone]) return { r: o.r, wave: 0, energy: 0 };
         const outer = o === list[0];
+        // The ring rides its form's hit growth a moment later, so the inner line moves first.
+        const follow = o.r + growOf(o.zone, t! - PAIR_LAG);
         const out = Math.max(0, o.r / outerR - 0.85); // 0 near the forms, up to ~0.9 for the farthest ring
-        const lag = OUTLINE_WAVE.lag * (o.r / outerR); // seconds: the wave reaches outer rings later
+        const lag = PAIR_LAG; // seconds: every ring reacts just after its form
         let own = 0;
         let all = 0;
         let energy = 0;
@@ -339,10 +366,10 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
           energy = Math.max(energy, s.energy);
         }
         // An inner pair's ring follows only its own instrument, riding just outside its form.
-        if (!outer) return { r: o.r + own * PAIR_SWELL, wave: own, energy };
+        if (!outer) return { r: follow + own * PAIR_SWELL, wave: own, energy };
         const wave = 0.65 * own + 0.35 * all;
         const breathe = o.grow * 0.35 * Math.sin((2 * Math.PI * now) / o.period + o.delay);
-        return { r: o.r * (1 + breathe + wave * (OUTLINE_WAVE.near + OUTLINE_WAVE.far * out)), wave, energy };
+        return { r: Math.max(follow + own * PAIR_SWELL, o.r * (1 + breathe + wave * (OUTLINE_WAVE.near + OUTLINE_WAVE.far * out))), wave, energy };
       });
 
       // The neon swells with the circle's sound and settles back with it.
@@ -378,7 +405,19 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
       // (every stroke keeps its resting width, see below).
       for (let k = 1; k < lines.length; k++) {
         const [a, b] = [lines[k - 1], lines[k]];
-        b.r = Math.max(b.r, a.r + a.w / 2 + (a.zone === b.zone ? PAIR_CLEAR : RING_CLEAR) + b.w / 2);
+        b.r = Math.max(b.r, a.r + a.w / 2 + (a.zone === b.zone ? (live ? PAIR_CLEAR_LIVE : PAIR_CLEAR) : RING_CLEAR) + b.w / 2);
+      }
+      // A silent instrument's lines (no active steps) never move, not even when a neighbour grows into them:
+      // from the outside in, they hold their rest radius and every line inside one stops short of it.
+      if (live) {
+        const silent = (z: Channel) => !activeRef.current[z];
+        for (let k = lines.length - 1; k > 0; k--) {
+          const b = lines[k];
+          if (silent(b.zone)) b.r = b.rest;
+          const a = lines[k - 1];
+          a.r = Math.max(a.rest, Math.min(a.r, b.r - b.w / 2 - (a.zone === b.zone ? PAIR_CLEAR_LIVE : RING_CLEAR) - a.w / 2));
+        }
+        if (silent(lines[0].zone)) lines[0].r = lines[0].rest;
       }
       for (const line of lines) {
         if (line.form) {
@@ -416,13 +455,9 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
 
         el.setAttribute('data-r0', String(r0));
         if (darkRef.current) {
-          // Dark Mode: the sounding form grows by a clearly visible amount whatever its size,
-          // and follows its sound as it rings out, so it eases back to its own size.
-          // √ lifts soft hits (a quiet Hi-hat), so every instrument shows clearly; full hits stay at 1.
-          const raw = rest && !(t !== null && animator) ? 0 : Math.max(Math.max(0, swell), animator && t !== null ? animator.presence(t, ch) : 0);
-          const act = raw < 0.002 ? 0 : Math.min(1.1, Math.sqrt(raw));
-          const calm = DARK_MOTION[ch] ?? 1;
-          el.setAttribute('r', act === 0 ? String(r0) : capRadius(r0 + calm * act * Math.max(r0 * DARK_HIT.share, DARK_HIT.min)).toFixed(4));
+          // Dark Mode: see growOf.
+          const act = t === null ? 0 : actOf(ch, t);
+          el.setAttribute('r', act === 0 ? String(r0) : capRadius(r0 + growOf(ch, t!)).toFixed(4));
           el.setAttribute('data-hit', act.toFixed(4));
         } else {
           el.setAttribute('r', rest ? String(r0) : capRadius(r0 * (1 + m.growth * swell)).toFixed(4));
@@ -618,7 +653,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
-            <filter id={`aura-${uid}`} x="-50%" y="-50%" width="200%" height="200%" colorInterpolationFilters="sRGB">
+            <filter id={`aura-${uid}`} x="-75%" y="-75%" width="250%" height="250%" colorInterpolationFilters="sRGB">
               <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near / DARK_SCALE} result="near" />
               <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid / DARK_SCALE} result="midBlur" />
               <feComponentTransfer in="midBlur" result="mid">

@@ -34,19 +34,23 @@ export const PAIR_CLEAR = 5;
 const FORM_HALF = 0.7;
 /** Dark Mode form outline stroke (drawing units). */
 export const DARK_FORM_STROKE = FORM_HALF * 2;
-/** Black space between two instrument groups (drawing units): a little more than inside a pair. */
-export const GROUP_CLEAR = 8;
-/** Centre-to-centre step from one instrument's form to the next one's (sizing units, before the artwork scale ≈ 0.975). */
+/** Least black space between two instrument groups (drawing units): clearly more than inside a pair. */
+export const GROUP_CLEAR = 12;
+/** Least centre-to-centre step from one instrument's form to the next one's (sizing units, before the artwork scale ≈ 0.975). */
 export const DARK_GROUP_PITCH = (FORM_HALF + PAIR_CLEAR + PAIR_RING_WIDTH + GROUP_CLEAR + FORM_HALF) / 0.975;
+/** Dark Mode Clap/Cymbal form radius (sizing units): kept small, at the heart of the circle. */
+export const DARK_CLAP_R = 17;
 
 /**
- * Dark Mode sizes: the Kick keeps its size from the beat (sizing.ts); the
- * other instruments follow it inward at one even step, so every pair has the
+ * Dark Mode sizes: the Kick keeps its size from the beat (sizing.ts), the
+ * Clap/Cymbal stays small (DARK_CLAP_R), and Snare and Hi-hat sit between them at one even step, so every pair has the
  * same spacing inside and every group the same, slightly wider, gap to the next.
  */
 export function darkSizes<T extends Record<Channel, number>>(sizes: T): T {
   const k = sizes.kick;
-  return { ...sizes, kick: k, snare: k - DARK_GROUP_PITCH, hihat: k - 2 * DARK_GROUP_PITCH, clap: k - 3 * DARK_GROUP_PITCH };
+  // The Clap/Cymbal stays small; the three gaps out to the Kick are equal (and never under DARK_GROUP_PITCH).
+  const step = Math.max(DARK_GROUP_PITCH, (k - DARK_CLAP_R) / 3);
+  return { ...sizes, kick: k, snare: k - step, hihat: k - 2 * step, clap: k - 3 * step };
 }
 
 /**
