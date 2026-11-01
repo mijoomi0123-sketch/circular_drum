@@ -160,6 +160,24 @@ const OUTLINE_GLOW = { near: 1.1, far: 4.5, farAlpha: 2.2 };
 /** Dark Mode forms are drawn as outlines this wide (drawing units) instead of filled surfaces. */
 const DARK_FORM_STROKE = 2;
 
+/**
+ * Dark Mode playing feedback: at a full hit a form grows by 30% of its radius
+ * or 20 units, whichever is more (so even the smallest form clearly grows),
+ * and its outline gets up to 2.5× thicker.
+ */
+const DARK_HIT = { share: 0.3, min: 20, stroke: 1.5 };
+
+/**
+ * Dark Mode size order: the four sizes from the rhythm (presets/sizing.ts),
+ * handed out largest first as Kick, Hi-hat, Snare, Clap/Cymbal, so the
+ * hierarchy always holds while each artwork keeps its own proportions.
+ */
+export const DARK_SIZE_ORDER: readonly Channel[] = ['kick', 'hihat', 'snare', 'clap'];
+function darkHierarchy(sizes: Record<Channel, number>): Record<Channel, number> {
+  const r = Object.values(sizes).sort((a, b) => b - a);
+  return Object.fromEntries(DARK_SIZE_ORDER.map((ch, i) => [ch, r[i]])) as Record<Channel, number>;
+}
+
 /** Spring rate of size changes (rad/s); critically damped, so no bounce. */
 const SIZE_SPRING = 9;
 /** Swollen forms ease into this band instead of leaving the frame. */
@@ -204,7 +222,7 @@ function transformOf(ring: Ring): string {
  */
 export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle, paused, className, label }: Props) {
   const { theme } = useSettings(); // re-render with the theme's palette (Dark Mode: more saturated, with a soft contour)
-  const sizes = circleSizes(patterns, steps);
+  const sizes = theme === 'dark' ? darkHierarchy(circleSizes(patterns, steps)) : circleSizes(patterns, steps);
   const sizeKey = CHANNELS.map((ch) => sizes[ch].toFixed(4)).join();
   const rings = useMemo(() => buildRings(design, sizes), [design.seed, sizeKey]);
   const byZone = useMemo(() => Object.fromEntries(rings.map((r) => [r.zone, r])) as Record<Channel, Ring>, [rings]);
@@ -336,7 +354,18 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         const energy = rest ? 0 : s!.energy;
 
         el.setAttribute('data-r0', String(r0));
-        el.setAttribute('r', rest ? String(r0) : capRadius(r0 * (1 + m.growth * swell)).toFixed(4));
+        if (darkRef.current) {
+          // Dark Mode: the sounding form grows by a clearly visible amount whatever its size,
+          // and follows its sound as it rings out, so it eases back to its own size.
+          // √ lifts soft hits (a quiet Hi-hat), so every instrument shows clearly; full hits stay at 1.
+          const raw = rest && !(t !== null && animator) ? 0 : Math.max(Math.max(0, swell), animator && t !== null ? animator.presence(t, ch) : 0);
+          const act = raw < 0.002 ? 0 : Math.min(1.1, Math.sqrt(raw));
+          el.setAttribute('r', act === 0 ? String(r0) : capRadius(r0 + act * Math.max(r0 * DARK_HIT.share, DARK_HIT.min)).toFixed(4));
+          el.setAttribute('stroke-width', act === 0 ? String(DARK_FORM_STROKE) : (DARK_FORM_STROKE * (1 + DARK_HIT.stroke * act)).toFixed(3));
+          el.setAttribute('data-hit', act.toFixed(4));
+        } else {
+          el.setAttribute('r', rest ? String(r0) : capRadius(r0 * (1 + m.growth * swell)).toFixed(4));
+        }
         el.setAttribute('transform', transformOf(ring));
         el.setAttribute('fill-opacity', rest ? String(ring.opacity) : Math.min(1, ring.opacity + m.fade * energy).toFixed(3));
 
