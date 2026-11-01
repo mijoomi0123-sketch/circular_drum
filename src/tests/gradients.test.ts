@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brightenHex, DARK_BRIGHTNESS, DARK_EARTH, DARK_HUE, DARK_MUTE, DARK_SATURATION, GRADIENTS, GRADIENTS_DARK, gradientFor, LIGHT_SATURATION, muteHex, saturateHex, withHue } from '../presets/gradients';
+import { brightenHex, DARK_BRIGHTNESS, DARK_TUNE, DARK_HUE, DARK_MUTE, DARK_SATURATION, GRADIENTS, GRADIENTS_DARK, gradientFor, LIGHT_SATURATION, muteHex, saturateHex, withHue } from '../presets/gradients';
 
 function hue(hex: string): number {
   const n = Number.parseInt(hex.slice(1), 16);
@@ -34,6 +34,12 @@ function hsv(hex: string): [number, number, number] {
 const hsvN = (hex: string) => { const [h, s, v] = hsv(hex); return [h, s, v / 255] as const; };
 
 describe('theme palettes', () => {
+  it('Dark Mode: pink and purple are clearly different hues (≥ 50° apart)', () => {
+    for (const tone of ['base', 'rich', 'deep'] as const) {
+      const d = Math.abs(hsvN(GRADIENTS_DARK.pink[tone])[0] - hsvN(GRADIENTS_DARK.purple[tone])[0]);
+      expect(Math.min(d, 360 - d), tone).toBeGreaterThanOrEqual(50);
+    }
+  });
   it('Dark Mode: orange and brown are clearly apart (hue ≥ 10°, and brown clearly darker and calmer)', () => {
     for (const tone of ['base', 'rich', 'deep'] as const) {
       const [ho, so, vo] = hsvN(GRADIENTS_DARK.orange[tone]);
@@ -74,7 +80,7 @@ describe('theme palettes', () => {
         const lit = brightenHex(sat, DARK_BRIGHTNESS);
         const h = DARK_HUE[id as keyof typeof GRADIENTS];
         const muted = muteHex(h === undefined ? lit : withHue(lit, h), DARK_MUTE.saturation, DARK_MUTE.value);
-        const e = DARK_EARTH[id as keyof typeof GRADIENTS];
+        const e = DARK_TUNE[id as keyof typeof GRADIENTS];
         expect(GRADIENTS_DARK[id as keyof typeof GRADIENTS][tone as keyof typeof g]).toBe(e ? muteHex(withHue(muted, e.hue), e.saturation, e.value) : muted);
       }
     }
@@ -82,7 +88,7 @@ describe('theme palettes', () => {
     expect(brightenHex('#F0A000', 1.2)).toBe('#FFC000');
   });
   it('is always derived from the Light palette, never compounding', () => {
-    expect(gradientFor('pink', 'dark').base).toBe(muteHex(brightenHex(saturateHex(GRADIENTS.pink.base, DARK_SATURATION), DARK_BRIGHTNESS), DARK_MUTE.saturation, DARK_MUTE.value));
+    expect(gradientFor('yellow', 'dark').base).toBe(muteHex(brightenHex(saturateHex(GRADIENTS.yellow.base, DARK_SATURATION), DARK_BRIGHTNESS), DARK_MUTE.saturation, DARK_MUTE.value));
     expect(gradientFor('blue', 'dark').base).toBe(gradientFor('blue', 'dark').base);
     expect(gradientFor('blue', 'light').base).toBe(saturateHex('#ADDBFB', LIGHT_SATURATION));
   });
@@ -98,8 +104,8 @@ describe('theme palettes', () => {
     expect(withHue('#80FFC0', 240)).toBe('#8080FF');
     expect(GRADIENTS.green.base).toBe('#ADF0E4');
   });
-  it('Dark Mode tones are deeper and muted (value ×0.8, saturation ×1.0005, same hue)', () => {
-    expect(DARK_MUTE).toEqual({ saturation: 0.85 * 1.1 * 1.07, value: 0.8 });
+  it('Dark Mode tones are deeper and muted (value ×0.8, saturation ×1.2006, same hue)', () => {
+    expect(DARK_MUTE).toEqual({ saturation: 0.85 * 1.1 * 1.07 * 1.2, value: 0.8 });
     expect(muteHex('#FF0000', DARK_MUTE.saturation, DARK_MUTE.value)).toBe('#CC0000');
     expect(muteHex('#FFFFFF', DARK_MUTE.saturation, DARK_MUTE.value)).toBe('#CCCCCC');
     expect(muteHex('#000000', DARK_MUTE.saturation, DARK_MUTE.value)).toBe('#000000');

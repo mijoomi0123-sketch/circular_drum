@@ -54,12 +54,18 @@ export const DARK_SATURATION = 1.4 * 1.25 * 1.05 * 1.5 * 0.9 * 0.9;
 export const DARK_HUE: Readonly<Partial<Record<ColorId, number>>> = { green: 150, blue: 212, orange: 30 };
 
 /**
- * Dark Mode brown: saturating and brightening turned it into a second orange,
- * so it is pulled back to an earthy, darker copper brown (hue, then saturation
- * and value scaled) that reads clearly apart from the bright orange.
+ * Dark Mode fine-tuning, after everything above (hue, then saturation and
+ * value scaled), so neighbouring colors read clearly apart on black:
+ *   brown  saturating and brightening turned it into a second orange, so it is
+ *          pulled back to an earthy, darker copper brown;
+ *   pink   clipped toward lavender (~300°), close to purple: turned to a clear
+ *          rose pink (330°) and made a little richer;
+ *   purple turned to a clear violet (268°), away from the pink.
  */
-export const DARK_EARTH: Readonly<Partial<Record<ColorId, { hue: number; saturation: number; value: number }>>> = {
+export const DARK_TUNE: Readonly<Partial<Record<ColorId, { hue: number; saturation: number; value: number }>>> = {
   brown: { hue: 18, saturation: 0.72, value: 0.76 },
+  pink: { hue: 332, saturation: 2.2, value: 1 },
+  purple: { hue: 266, saturation: 1.25, value: 1 },
 };
 
 /**
@@ -68,7 +74,7 @@ export const DARK_EARTH: Readonly<Partial<Record<ColorId, { hue: number; saturat
  * saturation ×0.85, same hue. The neon glow and its light-tone lift still come
  * from these tones, so the forms keep glowing, just in darker, muted colors.
  */
-export const DARK_MUTE = { saturation: 0.85 * 1.1 * 1.07, value: 0.8 } as const;
+export const DARK_MUTE = { saturation: 0.85 * 1.1 * 1.07 * 1.2, value: 0.8 } as const;
 
 /** One color with its HSV saturation and value each multiplied (clamped to 1), same hue. */
 export function muteHex(hex: string, saturation: number, value: number): string {
@@ -143,7 +149,7 @@ export const GRADIENTS_DARK: Readonly<Record<ColorId, GradientFamily>> = Object.
         const lit = brightenHex(saturateHex(hex, DARK_SATURATION), DARK_BRIGHTNESS);
         const h = DARK_HUE[id as ColorId];
         const muted = muteHex(h === undefined ? lit : withHue(lit, h), DARK_MUTE.saturation, DARK_MUTE.value);
-        const earth = DARK_EARTH[id as ColorId];
+        const earth = DARK_TUNE[id as ColorId];
         return [tone, earth ? muteHex(withHue(muted, earth.hue), earth.saturation, earth.value) : muted];
       }),
     ) as unknown as GradientFamily,
