@@ -212,8 +212,9 @@ input:focus-visible {
   transition: transform 520ms var(--ease-soft);
 }
 
-/* Listening: the artwork leans in a little, from its own centre. */
-.thumb.is-previewing .thumb-art {
+/* Moving (All Animations or a Preview, the same motion either way): the artwork leans in
+   a little, from its own centre. */
+.thumb:not([data-paused]) .thumb-art {
   transform: scale(1.045);
 }
 

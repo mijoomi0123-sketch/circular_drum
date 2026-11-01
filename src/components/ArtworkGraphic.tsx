@@ -172,6 +172,8 @@ const DARK_FORM_STROKE = 2;
  * Its outline keeps the same thin weight; the light around it does the rest.
  */
 const DARK_HIT = { share: 0.3, min: 20 };
+/** Dark Mode: the Kick's motion (its form's hit growth and the wave it sends through the rings) is a little calmer. */
+const DARK_MOTION: Partial<Record<Channel, number>> = { kick: 0.85 };
 
 /**
  * Dark Mode: the least black space between the strokes of two neighbouring
@@ -325,7 +327,7 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         let energy = 0;
         for (const ch of CHANNELS) {
           const s = animator!.sample(t! - lag, ch);
-          const v = Math.max(0, s.swell);
+          const v = Math.max(0, s.swell) * (DARK_MOTION[ch] ?? 1);
           if (ch === o.zone) own = v;
           all = Math.max(all, v);
           energy = Math.max(energy, s.energy);
@@ -411,7 +413,8 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
           // √ lifts soft hits (a quiet Hi-hat), so every instrument shows clearly; full hits stay at 1.
           const raw = rest && !(t !== null && animator) ? 0 : Math.max(Math.max(0, swell), animator && t !== null ? animator.presence(t, ch) : 0);
           const act = raw < 0.002 ? 0 : Math.min(1.1, Math.sqrt(raw));
-          el.setAttribute('r', act === 0 ? String(r0) : capRadius(r0 + act * Math.max(r0 * DARK_HIT.share, DARK_HIT.min)).toFixed(4));
+          const calm = DARK_MOTION[ch] ?? 1;
+          el.setAttribute('r', act === 0 ? String(r0) : capRadius(r0 + calm * act * Math.max(r0 * DARK_HIT.share, DARK_HIT.min)).toFixed(4));
           el.setAttribute('data-hit', act.toFixed(4));
         } else {
           el.setAttribute('r', rest ? String(r0) : capRadius(r0 * (1 + m.growth * swell)).toFixed(4));
@@ -438,7 +441,8 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
         const o = overlap[ch];
         const quiet = o.intensity === 0 && o.mix === 0;
         const sat = BASE_SAT * (1 + 0.45 * o.intensity + 0.15 * o.mix);
-        const lum = 1 + 0.07 * o.intensity;
+        // Light Mode layers same colors a touch deeper, so it adds no extra light.
+        const lum = darkRef.current ? 1 + 0.07 * o.intensity : 1;
         p.sat?.setAttribute('values', quiet ? String(BASE_SAT) : sat.toFixed(4));
         p.lum.forEach((fn) => fn.setAttribute('slope', quiet ? '1' : lum.toFixed(4)));
         p.tint?.setAttribute('flood-color', o.tintColor);

@@ -42,7 +42,7 @@ export function overlapState(
   presence: ((ch: Channel) => number) | null,
   sizes: Record<Channel, { x: number }>,
   colors: ChannelColors,
-  /** Light Mode mixes the colors themselves (see mixedWash); Dark Mode keeps the soft wash. */
+  /** Light Mode: no blending, only a subtle same-color layering (see sameColorLayer). Dark Mode keeps its wash. */
   mixing = false,
 ): Record<Channel, Overlap> {
   const out = { kick: NO_OVERLAP, snare: NO_OVERLAP, hihat: NO_OVERLAP, clap: NO_OVERLAP } as Record<Channel, Overlap>;
@@ -66,7 +66,7 @@ export function overlapState(
     }
     if (same === 0 && diff === 0) continue;
     if (mixing) {
-      out[x] = mixedWash(x, p, sizes, colors, same, diff);
+      out[x] = sameColorLayer(x, same, colors);
       continue;
     }
     const intensity = 1.5 * (1 - Math.exp(-0.6 * same));
@@ -85,82 +85,23 @@ export function overlapState(
   return out;
 }
 
-const hsvOf = (hex: string): [number, number, number] => {
-  const [r, g, b] = rgbOf(hex).map((c) => c / 255);
-  const v = Math.max(r, g, b);
-  const d = v - Math.min(r, g, b);
-  const h = d === 0 ? 0 : v === r ? ((g - b) / d) % 6 : v === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  return [((h * 60) + 360) % 360, v ? d / v : 0, v];
-};
-const rgbOfHsv = (h: number, s: number, v: number): [number, number, number] => {
-  const f = (k: number) => {
-    const t = (k + h / 60) % 6;
-    return 255 * (v - v * s * Math.max(0, Math.min(t, 4 - t, 1)));
-  };
-  return [f(5), f(3), f(1)];
-};
-
-/** How much more saturated a mix of colored light is than the more saturated of its colors. */
-export const LIGHT_MIX_SAT = 1.5;
-
 /**
- * Colors mixed like colored light, staying bright and clean: the hue is the
- * weighted average of the hues (on the color wheel, so Yellow + Blue lands on
- * green), the brightness is the brighter of the two, and the saturation is
- * the stronger one lifted by LIGHT_MIX_SAT. A color with itself keeps its hue
- * and becomes more vivid; nothing ever turns darker, gray or muddy.
+ * Light Mode: colors never blend. Each form keeps its own color wherever it
+ * overlaps a form of another color, and no new color is ever made. Only where
+ * forms of the same color sound together does that color layer up: a light
+ * wash of its own rich tone and a little more saturation, so it reads a touch
+ * deeper, never oversaturated or dark.
  */
-export function lightMix(colors: readonly { hex: string; w: number }[]): [number, number, number] {
-  let x = 0;
-  let y = 0;
-  let sat = 0;
-  let val = 0;
-  for (const { hex, w } of colors) {
-    const [h, s, v] = hsvOf(hex);
-    const k = w * Math.max(0.15, s); // gray-ish colors pull the hue less
-    x += Math.cos((h * Math.PI) / 180) * k;
-    y += Math.sin((h * Math.PI) / 180) * k;
-    sat = Math.max(sat, s);
-    val = Math.max(val, v);
-  }
-  const hue = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
-  return rgbOfHsv(hue, Math.min(1, sat * LIGHT_MIX_SAT), val);
-}
-
-/**
- * Light Mode: where sounding forms overlap, the shared region (the smaller
- * form, drawn on top) takes on the mix of the colors as colored light (see
- * lightMix), weighted by how loud each is, shown strongly enough to read as
- * one combined color: Yellow + Yellow becomes a brighter, more vivid yellow;
- * Blue + Yellow a clear, bright green.
- */
-function mixedWash(
-  x: Channel,
-  p: Record<Channel, number>,
-  sizes: Record<Channel, { x: number }>,
-  colors: ChannelColors,
-  same: number,
-  diff: number,
-): Overlap {
-  const own = gradientFor(colors[x]).base;
-  const parts: { hex: string; w: number }[] = [];
-  let total = 0;
-  for (const y of CHANNELS) {
-    if (y === x || p[y] <= 0.001 || sizes[y].x <= sizes[x].x) continue;
-    const w = p[x] * p[y];
-    parts.push({ hex: gradientFor(colors[y]).base, w });
-    total += w;
-  }
-  // The form's own color counts as much as all the colors beneath it together.
-  const rgb = lightMix([{ hex: own, w: total }, ...parts]);
-  const strength = MIX_STRENGTH * (1 - Math.exp(-2.4 * total));
+function sameColorLayer(x: Channel, same: number, colors: ChannelColors): Overlap {
+  if (same <= 0) return NO_OVERLAP;
+  const build = 1 - Math.exp(-1.2 * same); // 0 … 1, each further same-color sound adds a bit less
   return {
-    intensity: 1.5 * (1 - Math.exp(-0.6 * same)),
-    mix: 0.42 * (1 - Math.exp(-1.2 * diff)),
-    tintColor: `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('')}`,
-    tintOpacity: strength,
+    intensity: LIGHT_LAYER.intensity * build,
+    mix: 0,
+    tintColor: gradientFor(colors[x]).rich,
+    tintOpacity: LIGHT_LAYER.wash * build,
   };
 }
 
-/** How fully the mixed color replaces the shared region at full loudness (Light Mode). */
-export const MIX_STRENGTH = 0.85;
+/** How strongly same-color overlaps deepen in Light Mode (kept subtle). */
+export const LIGHT_LAYER = { intensity: 0.45, wash: 0.22 };

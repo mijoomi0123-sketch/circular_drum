@@ -30,14 +30,18 @@ const TONES: (keyof GradientFamily)[] = ['base', 'rich', 'light', 'base'];
 
 /**
  * The rings for one artwork, kept to the few that carry the motion (the four
- * forms are outlines themselves, so with these the whole circle is about
- * seven lines):
+ * forms are outlines themselves). Each ring belongs to one instrument, takes
+ * its color and follows its sound most:
  *
  *   - 1 small ring near the centre, linking it to the innermost form;
- *   - 1–2 wave rings beyond the outermost form, which a hit carries furthest.
+ *   - beyond the outermost form, counted from the outside: two Kick wave
+ *     rings, then the Snare ring (always the third ring from the outside),
+ *     then the Hi-hat ring, closest to the forms.
  *
  * Every ring reacts to the sound (see applyOutlines in ArtworkGraphic).
  */
+export const OUTER_RING_ZONES: readonly Channel[] = ['kick', 'kick', 'snare', 'hihat'];
+
 export function buildOutlineRings(seed: number, forms: readonly Ring[]): OutlineRing[] {
   const rnd = mulberry32((seed ^ 0x5f3759df) >>> 0);
   const between = (a: number, b: number) => a + rnd() * (b - a);
@@ -46,14 +50,16 @@ export function buildOutlineRings(seed: number, forms: readonly Ring[]): Outline
   const outermost = bySize[0];
   const innermost = bySize[bySize.length - 1];
 
-  const push = (zone: Channel, r: number, opacity: number, outward: number) => {
+  const push = (zone: Channel, r: number, opacity: number, outward: number, ownTone = false) => {
     const rr = Math.min(MAX_RING_R, r);
+    const tone = TONES[Math.floor(rnd() * TONES.length)];
     out.push({
       zone,
       r: rr,
       width: between(0.8, 1.9),
       opacity,
-      tone: TONES[Math.floor(rnd() * TONES.length)],
+      // The Snare and Hi-hat rings show their instrument's own color plainly, so each reads as that instrument's ring.
+      tone: ownTone ? 'base' : tone,
       grow: between(0.02, 0.05) + 0.07 * outward,
       period: between(6, 14),
       delay: -between(0, 14),
@@ -63,14 +69,15 @@ export function buildOutlineRings(seed: number, forms: readonly Ring[]): Outline
   // Centre: one ring halfway inside the smallest form, so the middle is not empty.
   push(innermost.zone, innermost.r * between(0.4, 0.55), between(0.7, 0.9), 0);
 
-
-  // Wave rings beyond it, at uneven gaps, fading as they go.
-  const n = 1 + Math.floor(rnd() * 2);
-  let r = outermost.r * 1.12;
+  // Outer rings, from the form outward: Hi-hat, Snare, then the two Kick waves,
+  // at slightly uneven gaps that always fit inside MAX_RING_R, fading as they go.
+  const n = OUTER_RING_ZONES.length;
+  const room = (MAX_RING_R - outermost.r) / n;
+  let r = outermost.r;
   for (let i = 0; i < n; i++) {
-    r += outermost.r * between(0.16, 0.26);
-    if (r > MAX_RING_R) break;
-    push(outermost.zone, r, 0.85 * (1 - i * 0.3) * between(0.85, 1), (i + 1) / n);
+    r += Math.min(room, outermost.r * between(0.17, 0.22));
+    const zone = OUTER_RING_ZONES[n - 1 - i];
+    push(zone, r, 0.9 * (1 - i * 0.12) * between(0.85, 1), (i + 1) / n, zone !== 'kick');
   }
   return out;
 }

@@ -6,7 +6,7 @@ import { audioEngine } from '../audio/engine';
 import { Transport, transport } from '../audio/transport';
 import { gradientFor } from '../presets/gradients';
 import { updateSettings, useSettings } from '../storage/settingsStore';
-import type { Artwork } from '../types';
+import type { Artwork, ChannelColors } from '../types';
 import type { CircleSettings } from './fullscreenLayout';
 import { ArtworkGraphic } from './ArtworkGraphic';
 import { FullscreenView } from './FullscreenView';
@@ -481,6 +481,7 @@ function FullscreenCircle({
         // Fullscreen follows only each circle's own setting: the Library's All Animations never reaches it.
         paused={!settings.animate}
         preview={settings.audible ? voice.animator : preview}
+        sounds={soundColors(a, settings.sound)}
         className="fs-art"
       />
     </div>
@@ -492,13 +493,20 @@ function FullscreenCircle({
  * the editor (its own steps, tempo and per-instrument motion), but silently.
  * While its preview plays, the forms follow the real sound instead.
  */
-function LibraryArt({ artwork: a, paused, preview, className = 'thumb-art' }: { artwork: Artwork; paused: boolean; preview?: DropletAnimator; className?: string }) {
+function LibraryArt({ artwork: a, paused, preview, sounds, className = 'thumb-art' }: { artwork: Artwork; paused: boolean; preview?: DropletAnimator; sounds?: ChannelColors; className?: string }) {
   const key = `${a.bpm}|${a.steps}|${CHANNEL_KEYS.map((ch) => a.patterns[ch].slice(0, a.steps).map(Number).join('')).join('|')}`;
+  const soundKey = CHANNEL_KEYS.map((ch) => (sounds ?? a.colors)[ch]).join();
   const rhythm = useMemo(
-    () => new SilentRhythm({ patterns: a.patterns, steps: a.steps, bpm: a.bpm, colors: a.colors }),
-    [key, a.colors],
+    () => new SilentRhythm({ patterns: a.patterns, steps: a.steps, bpm: a.bpm, colors: a.colors, sounds }),
+    [key, a.colors, soundKey],
   );
   const moving = !paused && !preview;
+  // The silent rhythm reads each hit's loudness from the real sample, exactly as playback does,
+  // so the samples are fetched and decoded (never played) as soon as the circle moves.
+  const { theme } = useSettings();
+  useEffect(() => {
+    if (moving) void audioEngine.preload([sounds ?? a.colors]);
+  }, [moving, soundKey, theme]);
   // A stopped circle follows nothing: not its silent rhythm and not a preview's sound,
   // so it holds its exact rest shape while the preview keeps playing.
   const drive = paused ? undefined : (preview ?? rhythm);
