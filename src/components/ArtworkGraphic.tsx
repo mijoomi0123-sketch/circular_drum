@@ -163,9 +163,9 @@ const OUTLINE_WAVE = { near: 0.14, far: 0.75, lag: 0.07 };
  * into the black without filling the inside. While the circle sounds, the
  * glows brighten with the hits (`boost`) and settle back as the sound fades.
  */
-/** Neon core: each line's own color mixed 18% toward white (enough to read as a lit tube, little enough to keep the color vivid). */
-const NEON_CORE = '0.82 0 0 0 0.18  0 0.82 0 0 0.18  0 0 0.82 0 0.18  0 0 0 1 0';
-const NEON_GLOW = { near: 1.4, mid: 3.4, midAlpha: 2.8, wide: 13, wideAlpha: 2.1, far: 38, farAlpha: 1.6, innerWideAlpha: 1.25, boost: { mid: 0.5, wide: 0.8, far: 1.1 } };
+/** Neon core: each line's own color mixed 40% toward white, a bright lit tube; the color lives in the glow around it (NEON_GLOW.glowSat). */
+const NEON_CORE = '0.6 0 0 0 0.4  0 0.6 0 0 0.4  0 0 0.6 0 0.4  0 0 0 1 0';
+const NEON_GLOW = { near: 1.4, mid: 3.4, midAlpha: 2.8, wide: 14, wideAlpha: 2.4, far: 44, farAlpha: 1.9, innerWide: 0.75, innerWideAlpha: 1.6, glowSat: 1.8, boost: { mid: 0.5, wide: 0.8, far: 1.1 } };
 
 /** Dark Mode forms are drawn as outlines this wide (drawing units) instead of filled surfaces. */
 
@@ -647,14 +647,17 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
             {/* Dark Mode neon, in the lines' own colors, with the crisp strokes on top so the structure stays sharp:
                 every line gets a tight bloom and a close glow; the outer lines also a wide diffuse light that
                 fades gradually into the black (see NEON_GLOW). */}
-            <filter id={`neon-${uid}`} x="-30%" y="-30%" width="160%" height="160%" colorInterpolationFilters="sRGB">
+            <filter id={`neon-${uid}`} x="-45%" y="-45%" width="190%" height="190%" colorInterpolationFilters="sRGB">
               <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near / DARK_SCALE} result="near" />
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid / DARK_SCALE} result="midBlur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid / DARK_SCALE} result="midSoft" />
+              <feColorMatrix in="midSoft" type="saturate" values={String(NEON_GLOW.glowSat)} result="midBlur" />
               <feComponentTransfer in="midBlur" result="mid">
                 <feFuncA data-part="neon-mid" type="linear" slope={NEON_GLOW.midAlpha} />
               </feComponentTransfer>
               {/* Inner lines glow like neon tubes too: a soft halo around each, kept close so the black between them stays. */}
-              <feGaussianBlur in="SourceGraphic" stdDeviation={(NEON_GLOW.wide * 0.5) / DARK_SCALE} result="innerWideBlur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={(NEON_GLOW.wide * NEON_GLOW.innerWide) / DARK_SCALE} result="innerWideSoft" />
+              {/* The spreading light carries each line's own color, richer than the line's white-hot core. */}
+              <feColorMatrix in="innerWideSoft" type="saturate" values={String(NEON_GLOW.glowSat)} result="innerWideBlur" />
               <feComponentTransfer in="innerWideBlur" result="innerWide">
                 <feFuncA type="linear" slope={NEON_GLOW.innerWideAlpha} />
               </feComponentTransfer>
@@ -670,15 +673,18 @@ export function ArtworkGraphic({ design, colors, patterns, steps, animator, idle
             </filter>
             <filter id={`aura-${uid}`} x="-75%" y="-75%" width="250%" height="250%" colorInterpolationFilters="sRGB">
               <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.near / DARK_SCALE} result="near" />
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid / DARK_SCALE} result="midBlur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.mid / DARK_SCALE} result="midSoft" />
+              <feColorMatrix in="midSoft" type="saturate" values={String(NEON_GLOW.glowSat)} result="midBlur" />
               <feComponentTransfer in="midBlur" result="mid">
                 <feFuncA data-part="neon-mid" type="linear" slope={NEON_GLOW.midAlpha} />
               </feComponentTransfer>
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.wide / DARK_SCALE} result="wideBlur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.wide / DARK_SCALE} result="wideSoft" />
+              <feColorMatrix in="wideSoft" type="saturate" values={String(NEON_GLOW.glowSat)} result="wideBlur" />
               <feComponentTransfer in="wideBlur" result="wide">
                 <feFuncA data-part="neon-wide" type="linear" slope={NEON_GLOW.wideAlpha} />
               </feComponentTransfer>
-              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.far / DARK_SCALE} result="farBlur" />
+              <feGaussianBlur in="SourceGraphic" stdDeviation={NEON_GLOW.far / DARK_SCALE} result="farSoft" />
+              <feColorMatrix in="farSoft" type="saturate" values={String(NEON_GLOW.glowSat)} result="farBlur" />
               <feComponentTransfer in="farBlur" result="far">
                 <feFuncA data-part="neon-far" type="linear" slope={NEON_GLOW.farAlpha} />
               </feComponentTransfer>
